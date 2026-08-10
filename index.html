@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#34503F">
+<title>Study Lab — Marvelous's smart study helper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@600;700&family=Lexend:wght@400;500;600&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FAF4E8; --card:#FFFDF7; --herb:#34503F; --herb-2:#436A52;
+  --amber:#E8A33D; --tomato:#C4553B; --ink:#262019; --ink-soft:#5B5346;
+  --line:#E7DEC9; --hi:#FCE39A; --hi-ring:#E8A33D;
+  --read-font:'Lexend',system-ui,sans-serif; --read-size:21px; --read-line:1.85; --read-letter:0.02em;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;}
+body{background:var(--paper);color:var(--ink);font-family:'Lexend',system-ui,sans-serif;-webkit-text-size-adjust:100%;min-height:100vh;}
+
+header{background:var(--herb);color:#F7F3E8;padding:calc(14px + env(safe-area-inset-top,0)) 18px 12px;position:sticky;top:0;z-index:40;}
+.head-row{display:flex;align-items:center;gap:12px;max-width:920px;margin:0 auto;}
+.brand b{font-family:'Saira Condensed',sans-serif;font-weight:700;font-size:29px;letter-spacing:.5px;text-transform:uppercase;display:block;line-height:1;}
+.brand span{font-size:12.5px;opacity:.82;}
+nav.tabs{background:var(--herb);position:sticky;z-index:39;padding:0 12px 12px;}
+.tabs-inner{display:flex;gap:8px;max-width:920px;margin:0 auto;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.tab{flex:0 0 auto;border:none;cursor:pointer;background:rgba(255,255,255,.10);color:#EDE6D4;font-family:'Saira Condensed',sans-serif;font-weight:600;font-size:16px;letter-spacing:.4px;text-transform:uppercase;padding:10px 15px;border-radius:11px;}
+.tab.active{background:var(--paper);color:var(--herb);}
+
+main{max-width:920px;margin:0 auto;padding:20px 16px 60px;}
+.panel{display:none;}.panel.active{display:block;}
+.eyebrow{font-family:'Saira Condensed',sans-serif;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;font-size:14px;color:var(--amber);margin:0 0 4px;}
+h2.title{font-family:'Saira Condensed',sans-serif;font-weight:700;font-size:32px;margin:0 0 14px;color:var(--herb);letter-spacing:.5px;}
+p.lead{color:var(--ink-soft);font-size:15.5px;line-height:1.6;margin:0 0 16px;}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 18px;box-shadow:0 3px 0 rgba(0,0,0,.04);margin-bottom:14px;}
+.btn{border:none;cursor:pointer;border-radius:12px;font-family:'Saira Condensed',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.5px;font-size:16px;padding:13px 18px;}
+.btn.primary{background:var(--herb);color:#fff;box-shadow:0 2px 0 #223a2c;}
+.btn.amber{background:var(--amber);color:#3a2c0e;box-shadow:0 2px 0 #b97f22;}
+.btn.ghost{background:#EEE7D5;color:var(--herb);}
+.btn.tomato{background:var(--tomato);color:#fff;}
+.btn.block{width:100%;display:block;}
+.btn:active{transform:translateY(1px);}
+.btn[disabled]{opacity:.5;cursor:default;}
+.btn.small{font-size:14px;padding:9px 13px;}
+.row{display:flex;gap:10px;flex-wrap:wrap;}
+
+textarea,input[type=text],input[type=password]{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:14px;font-family:var(--read-font);font-size:var(--read-size);line-height:1.6;background:var(--card);color:var(--ink);resize:vertical;}
+textarea{min-height:150px;}
+label.k{display:block;font-family:'Saira Condensed',sans-serif;text-transform:uppercase;letter-spacing:.8px;font-size:14px;color:var(--herb);font-weight:700;margin:14px 0 8px;}
+
+.readtext{font-family:var(--read-font);font-size:var(--read-size);line-height:var(--read-line);letter-spacing:var(--read-letter);color:var(--ink);white-space:pre-wrap;}
+.w{border-radius:6px;padding:1px;}
+.w.on{background:var(--hi);box-shadow:0 0 0 2px var(--hi-ring) inset;color:#3a2c0e;}
+
+.readbar{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+.note-item{display:flex;flex-direction:column;gap:6px;}
+.note-item h3{font-family:'Saira Condensed',sans-serif;font-size:22px;color:var(--herb);margin:0;letter-spacing:.3px;}
+.note-item .meta{font-size:12.5px;color:var(--ink-soft);}
+.summary-box{background:#EEF4EF;border:1px solid #CFE0D4;border-radius:12px;padding:12px 14px;margin-top:10px;}
+.summary-box .lbl{font-family:'Saira Condensed',sans-serif;text-transform:uppercase;letter-spacing:1px;font-size:13px;color:var(--herb-2);font-weight:700;display:block;margin-bottom:4px;}
+
+.hint{font-size:13.5px;color:var(--ink-soft);line-height:1.55;margin-top:8px;}
+.hint b{color:var(--herb);}
+
+/* chat */
+.msg{border-radius:14px;padding:12px 15px;margin-bottom:10px;max-width:92%;font-family:var(--read-font);font-size:18px;line-height:1.55;white-space:pre-wrap;}
+.msg.me{background:var(--herb);color:#F4EEDE;margin-left:auto;border-bottom-right-radius:4px;}
+.msg.ai{background:var(--card);border:1px solid var(--line);border-bottom-left-radius:4px;}
+.thinking{color:var(--ink-soft);font-style:italic;}
+
+/* progress */
+.progress{height:10px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:10px;}
+.progress > i{display:block;height:100%;background:var(--amber);width:0;transition:width .2s;}
+
+/* settings option pills */
+.opts{display:flex;flex-wrap:wrap;gap:8px;}
+.opt{border:1.5px solid var(--line);background:var(--card);cursor:pointer;border-radius:10px;padding:9px 13px;font-family:'Lexend',sans-serif;font-size:14.5px;color:var(--ink);}
+.opt.sel{border-color:var(--herb);background:var(--herb);color:#fff;}
+select,input[type=range]{width:100%;}
+select{padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;font-family:'Lexend',sans-serif;font-size:15px;background:var(--card);color:var(--ink);}
+input[type=range]{accent-color:var(--herb);height:26px;}
+
+#toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(20px);background:var(--herb);color:#F4EEDE;padding:12px 20px;border-radius:14px;font-size:15.5px;opacity:0;pointer-events:none;transition:.3s;z-index:90;max-width:88vw;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.2);}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+footer{text-align:center;padding:24px 18px calc(30px + env(safe-area-inset-bottom,0));color:var(--ink-soft);}
+footer .verse{font-style:italic;font-size:14px;max-width:520px;margin:0 auto 8px;line-height:1.6;}
+footer .amhg{font-family:'Saira Condensed',sans-serif;text-transform:uppercase;letter-spacing:1.2px;font-size:12.5px;color:var(--herb);font-weight:700;}
+button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-offset:2px;}
+@media(prefers-reduced-motion:reduce){*{transition-duration:.001ms!important;}}
+.empty{color:var(--ink-soft);font-size:15.5px;line-height:1.6;}
+</style>
+</head>
+<body>
+<header>
+  <div class="head-row">
+    <div class="brand"><b>Study Lab</b><span>Marvelous's smart study helper</span></div>
+  </div>
+</header>
+<nav class="tabs">
+  <div class="tabs-inner" id="tabs">
+    <button class="tab active" data-tab="notes">Notes</button>
+    <button class="tab" data-tab="snap">Snap a Page</button>
+    <button class="tab" data-tab="record">Record</button>
+    <button class="tab" data-tab="ask">Ask for Help</button>
+    <button class="tab" data-tab="settings">Settings</button>
+  </div>
+</nav>
+
+<main>
+  <!-- NOTES -->
+  <section class="panel active" id="p-notes">
+    <p class="eyebrow">Your notebook</p>
+    <h2 class="title">My notes</h2>
+    <p class="lead">Type a note, or tap the <b>microphone on your keyboard</b> and just talk — the iPad writes it for you. Then have it read back, or ask for a simple summary.</p>
+    <div class="card">
+      <label class="k" for="noteTitle">Title</label>
+      <input type="text" id="noteTitle" placeholder="e.g. Food safety — the 4 Cs">
+      <label class="k" for="noteText">Note</label>
+      <textarea id="noteText" placeholder="Type here, or tap the keyboard microphone and speak…"></textarea>
+      <div class="row" style="margin-top:12px;">
+        <button class="btn primary" id="saveNote">Save note</button>
+        <button class="btn ghost" id="clearNote">Clear</button>
+      </div>
+    </div>
+    <div id="notesList"></div>
+  </section>
+
+  <!-- SNAP -->
+  <section class="panel" id="p-snap">
+    <p class="eyebrow">Photo to text</p>
+    <h2 class="title">Snap a page</h2>
+    <p class="lead">Take a photo of a page from her book or worksheet. The app reads the words from the picture and turns them into a note she can listen to.</p>
+    <div class="card">
+      <input type="file" id="snapInput" accept="image/*" style="display:none;">
+      <button class="btn amber block" id="snapBtn">📷 Take or choose a photo</button>
+      <div id="snapPreview" style="margin-top:12px;"></div>
+      <div id="snapProgress"></div>
+    </div>
+    <div id="snapResult"></div>
+  </section>
+
+  <!-- RECORD -->
+  <section class="panel" id="p-record">
+    <p class="eyebrow">Record a lesson</p>
+    <h2 class="title">Record</h2>
+    <p class="lead">Record the class, listen back (stop and carry on where you left off), and turn the whole recording into written notes.</p>
+    <div class="card">
+      <div class="row">
+        <button class="btn tomato" id="recBtn">● Start recording</button>
+      </div>
+      <div id="recStatus" class="hint"></div>
+      <div id="recPlayer" style="margin-top:12px;"></div>
+      <div id="whisperProgress"></div>
+    </div>
+    <div id="recResult"></div>
+    <p class="hint">First time you transcribe, it downloads a small language model (about 75MB), then it works offline. It runs fast on a strong laptop; on the iPad it may take a little longer.</p>
+  </section>
+
+  <!-- ASK -->
+  <section class="panel" id="p-ask">
+    <p class="eyebrow">Your tutor</p>
+    <h2 class="title">Ask for help</h2>
+    <p class="lead">Ask anything about Hospitality and Catering — theory, coursework, or the practical exam. She explains simply and helps you understand it in your own words.</p>
+    <div id="chatWrap" class="card" style="min-height:120px;"></div>
+    <div class="card">
+      <div id="askImgPreview"></div>
+      <textarea id="askInput" placeholder="Type your question…" style="min-height:90px;"></textarea>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn primary" id="askSend">Ask</button>
+        <input type="file" id="askImg" accept="image/*" style="display:none;">
+        <button class="btn ghost" id="askImgBtn">📷 Add a photo</button>
+        <button class="btn ghost" id="askClear">Clear chat</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="panel" id="p-settings">
+    <p class="eyebrow">Set up &amp; make it yours</p>
+    <h2 class="title">Settings</h2>
+
+    <div class="card">
+      <label class="k">Anthropic API key</label>
+      <p class="hint">Needed for photo-to-text, summaries and the tutor. Get one at <b>console.anthropic.com</b>. It is saved only on this device, never in the app's code.</p>
+      <input type="password" id="apiKey" placeholder="sk-ant-…" autocomplete="off">
+      <div class="row" style="margin-top:10px;">
+        <button class="btn primary" id="saveKey">Save key</button>
+        <button class="btn ghost" id="clearKey">Remove key</button>
+      </div>
+      <div id="keyStatus" class="hint"></div>
+    </div>
+
+    <div class="card">
+      <label class="k">Voice</label>
+      <select id="voiceSelect"></select>
+      <button class="btn amber small block" id="testVoice" style="margin-top:9px;">▶ Test this voice</button>
+      <p class="hint">♀ marks likely female voices. Good ones are usually Kate, Karen, Samantha or Sonia.</p>
+
+      <label class="k">Reading speed</label>
+      <input type="range" id="rate" min="0.5" max="1.05" step="0.05" value="0.72">
+      <div class="hint" id="rateVal">Just right</div>
+
+      <label class="k">Text size</label>
+      <div class="opts" id="sizeOpts">
+        <button class="opt" data-val="18px">Small</button>
+        <button class="opt sel" data-val="21px">Medium</button>
+        <button class="opt" data-val="26px">Large</button>
+      </div>
+
+      <label class="k">Font</label>
+      <div class="opts" id="fontOpts">
+        <button class="opt sel" data-val="lexend">Lexend</button>
+        <button class="opt" data-val="atkinson">Atkinson</button>
+      </div>
+    </div>
+    <p class="hint">Study Lab keeps her notes on this device. Clearing the browser data will remove them, so tell her to keep anything important elsewhere too.</p>
+  </section>
+</main>
+
+<div id="toast"></div>
+<footer>
+  <p class="verse">"Commit thy works unto the LORD, and thy thoughts shall be established." — Proverbs 16:3</p>
+  <p class="amhg">Glory to God alone · AMHG</p>
+</footer>
+
+<!-- In-browser Whisper (loads only when needed) -->
+<script type="module">
+  let asr = null;
+  window.SL_whisperState = 'idle';
+  window.SL_loadWhisper = async function(progressCb){
+    if(asr) return asr;
+    window.SL_whisperState = 'loading';
+    const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3/+esm');
+    env.allowLocalModels = false;
+    asr = await pipeline('automatic-speech-recognition','Xenova/whisper-base.en',{ progress_callback: progressCb });
+    window.SL_whisperState = 'ready';
+    return asr;
+  };
+  window.SL_transcribe = async function(float32){
+    if(!asr) throw new Error('not-loaded');
+    const r = await asr(float32, { chunk_length_s:30, stride_length_s:5 });
+    return (r && r.text ? r.text : '').trim();
+  };
+</script>
+
+<script>
+(function(){
+  "use strict";
+  var synth = window.speechSynthesis;
+  var voice = null, voiceList = [], userChoseVoice=false;
+
+  /* ---------- settings ---------- */
+  var settings = load('sl_settings', {rate:0.72, size:'21px', font:'lexend', voiceName:null});
+  var FONTS = { lexend:"'Lexend',system-ui,sans-serif", atkinson:"'Atkinson Hyperlegible',system-ui,sans-serif" };
+  function applySettings(){
+    document.documentElement.style.setProperty('--read-font', FONTS[settings.font]||FONTS.lexend);
+    document.documentElement.style.setProperty('--read-size', settings.size);
+    var rv=document.getElementById('rateVal');
+    rv.textContent = settings.rate<0.66?'Slower and clearer':(settings.rate<0.82?'Just right':'A bit quicker');
+    mark('sizeOpts', settings.size); mark('fontOpts', settings.font);
+    document.getElementById('rate').value = settings.rate;
+  }
+  function mark(id, val){ var g=document.getElementById(id); if(!g) return; var k=g.querySelectorAll('.opt'); for(var i=0;i<k.length;i++){ k[i].classList.toggle('sel', k[i].getAttribute('data-val')===val); } }
+
+  /* ---------- storage helpers ---------- */
+  function load(key, def){ try{ var v=localStorage.getItem(key); return v?JSON.parse(v):def; }catch(e){ return def; } }
+  function save(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
+
+  /* ---------- API key ---------- */
+  function getKey(){ return localStorage.getItem('sl_apikey')||''; }
+  function needKey(){ toast('Add your Anthropic key in Settings first.'); switchTab('settings'); }
+
+  /* ---------- Claude call ---------- */
+  function claude(opts){
+    var key=getKey();
+    if(!key) return Promise.reject(new Error('no-key'));
+    return fetch("https://api.anthropic.com/v1/messages", {
+      method:"POST",
+      headers:{ "content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true" },
+      body: JSON.stringify({ model: opts.model||'claude-sonnet-5', max_tokens: opts.max_tokens||1200, system: opts.system||undefined, messages: opts.messages })
+    }).then(function(res){
+      return res.text().then(function(t){
+        if(!res.ok){
+          var msg = 'Something went wrong.';
+          if(res.status===401) msg='Your API key looks wrong. Check it in Settings.';
+          else if(res.status===429) msg='Too many requests right now. Wait a moment and try again.';
+          else if(res.status===400) msg='That request could not be read. Try a smaller photo or shorter text.';
+          try{ var j=JSON.parse(t); if(j.error&&j.error.message) msg+=' ('+j.error.message+')'; }catch(e){}
+          throw new Error(msg);
+        }
+        var data=JSON.parse(t);
+        return (data.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('\n');
+      });
+    });
+  }
+  function fileToB64(file){ return new Promise(function(res,rej){ var r=new FileReader(); r.onload=function(){ res(r.result.split(',')[1]); }; r.onerror=rej; r.readAsDataURL(file); }); }
+  function mediaType(file){ var t=(file.type||'').toLowerCase(); if(t==='image/jpg')t='image/jpeg'; if(['image/jpeg','image/png','image/gif','image/webp'].indexOf(t)<0)t='image/jpeg'; return t; }
+
+  /* ---------- speech: read aloud with pause / resume ---------- */
+  var rd = { chunks:[], idx:0, playing:false, paused:false };
+  function loadVoice(){
+    if(!synth) return;
+    var vs=synth.getVoices(); if(!vs||!vs.length) return;
+    if(settings.voiceName){ for(var i=0;i<vs.length;i++){ if(vs[i].name===settings.voiceName){ voice=vs[i]; userChoseVoice=true; break; } } }
+    if(!voice) voice=pickFemale(vs);
+    populateVoices(vs);
+  }
+  var MALE=['english male','daniel','arthur','oliver','george','ryan','rishi','alex','fred','david','mark','james','thomas','guy'];
+  var FEM=['female','uk english female','us english','libby','sonia','hazel','kate','karen','serena','stephanie','martha','fiona','samantha','victoria','tessa','moira','catherine','zira','aria','jenny'];
+  function nameHas(v,l){ var n=(v.name||'').toLowerCase(); for(var i=0;i<l.length;i++){ if(n.indexOf(l[i])>=0) return true; } return false; }
+  function isEn(v){ return (v.lang||'').toLowerCase().indexOf('en')===0; }
+  function pickFemale(vs){
+    var en=vs.filter(isEn); if(!en.length) en=vs.slice();
+    function gb(v){ return (v.lang||'').toLowerCase().indexOf('en-gb')===0; }
+    var pools=[ en.filter(function(v){return gb(v)&&nameHas(v,FEM)&&!nameHas(v,MALE);}),
+                en.filter(function(v){return nameHas(v,FEM)&&!nameHas(v,MALE);}),
+                en.filter(function(v){return gb(v)&&!nameHas(v,MALE);}),
+                en.filter(function(v){return !nameHas(v,MALE);}), en ];
+    for(var i=0;i<pools.length;i++){ if(pools[i].length) return pools[i][0]; }
+    return vs[0];
+  }
+  function populateVoices(vs){
+    var sel=document.getElementById('voiceSelect'); if(!sel) return;
+    voiceList=vs.filter(isEn); if(!voiceList.length) voiceList=vs.slice();
+    sel.innerHTML='';
+    for(var i=0;i<voiceList.length;i++){
+      var o=document.createElement('option'); o.value=i;
+      var tag=nameHas(voiceList[i],FEM)&&!nameHas(voiceList[i],MALE)?' ♀':(nameHas(voiceList[i],MALE)?' ♂':'');
+      o.textContent=voiceList[i].name+' — '+voiceList[i].lang+tag; sel.appendChild(o);
+    }
+    var idx=0; for(var j=0;j<voiceList.length;j++){ if(voice&&voiceList[j].name===voice.name){ idx=j; break; } }
+    sel.value=idx;
+  }
+  if(synth){ loadVoice(); if(typeof synth.onvoiceschanged!=='undefined') synth.onvoiceschanged=loadVoice; }
+
+  function splitSentences(text){
+    var t=(text||'').replace(/\r/g,'');
+    t=t.replace(/([.!?:])\s+/g,'$1\u0001').replace(/\n+/g,'\u0001');
+    var parts=t.split('\u0001');
+    var out=[]; for(var i=0;i<parts.length;i++){ var s=parts[i].trim(); if(s) out.push(s); } return out;
+  }
+  function gap(){ return Math.round(320 - (settings.rate-0.5)*260); } // ~320ms slow .. ~180ms fast
+
+  function speak(text, btnState){
+    stopSpeak();
+    rd.chunks=splitSentences(text); rd.idx=0; rd.playing=true; rd.paused=false;
+    if(btnState) rd.state=btnState;
+    playNext();
+    refreshReadBars();
+  }
+  function playNext(){
+    if(!rd.playing||rd.paused) return;
+    if(rd.idx>=rd.chunks.length){ stopSpeak(); return; }
+    var u=new SpeechSynthesisUtterance(rd.chunks[rd.idx]);
+    if(voice) u.voice=voice; u.lang='en-GB'; u.rate=settings.rate;
+    u.onend=function(){ if(rd.playing&&!rd.paused){ rd.idx++; setTimeout(playNext, gap()); } };
+    u.onerror=function(){ if(rd.playing&&!rd.paused){ rd.idx++; setTimeout(playNext, gap()); } };
+    try{ synth.cancel(); synth.speak(u); }catch(e){}
+  }
+  function pauseSpeak(){ rd.paused=true; try{synth.cancel();}catch(e){} refreshReadBars(); }
+  function resumeSpeak(){ if(rd.paused){ rd.paused=false; playNext(); refreshReadBars(); } }
+  function stopSpeak(){ rd.playing=false; rd.paused=false; try{synth.cancel();}catch(e){} refreshReadBars(); }
+
+  /* a reusable read bar: Play / Pause / Stop for a piece of text */
+  var readBars=[];
+  function makeReadBar(getText){
+    var bar=document.createElement('div'); bar.className='readbar';
+    var play=document.createElement('button'); play.className='btn amber small';
+    var stop=document.createElement('button'); stop.className='btn ghost small'; stop.textContent='⏹ Stop';
+    bar.appendChild(play); bar.appendChild(stop);
+    var obj={bar:bar, play:play, stop:stop, getText:getText};
+    play.onclick=function(){
+      if(rd.playing && rd.owner===obj && !rd.paused){ pauseSpeak(); }
+      else if(rd.playing && rd.owner===obj && rd.paused){ resumeSpeak(); }
+      else { rd.owner=obj; speak(getText()); }
+    };
+    stop.onclick=function(){ stopSpeak(); };
+    readBars.push(obj); refreshOne(obj); return bar;
+  }
+  function refreshOne(obj){
+    var mine = rd.owner===obj && rd.playing;
+    if(mine && !rd.paused){ obj.play.textContent='⏸ Pause'; }
+    else if(mine && rd.paused){ obj.play.textContent='▶ Continue'; }
+    else { obj.play.textContent='🔊 Read to me'; }
+  }
+  function refreshReadBars(){ for(var i=0;i<readBars.length;i++) refreshOne(readBars[i]); }
+
+  /* ---------- NOTES ---------- */
+  var notes = load('sl_notes', []);
+  function saveNotes(){ save('sl_notes', notes); }
+  function renderNotes(){
+    var wrap=document.getElementById('notesList'); wrap.innerHTML='';
+    readBars=[]; // rebuild bars
+    if(!notes.length){ wrap.innerHTML='<p class="empty">No notes yet. Write one above, or use Snap a Page or Record to make one.</p>'; return; }
+    for(var i=0;i<notes.length;i++){ (function(n){
+      var card=document.createElement('div'); card.className='card note-item';
+      var h=document.createElement('h3'); h.textContent=n.title||'Untitled note';
+      var meta=document.createElement('div'); meta.className='meta'; meta.textContent=new Date(n.ts).toLocaleString();
+      var body=document.createElement('div'); body.className='readtext'; body.textContent=n.text;
+      card.appendChild(h); card.appendChild(meta); card.appendChild(body);
+      card.appendChild(makeReadBar(function(){ return (n.title?n.title+'. ':'')+n.text; }));
+      var actions=document.createElement('div'); actions.className='row'; actions.style.marginTop='10px';
+      var sum=document.createElement('button'); sum.className='btn primary small'; sum.textContent='✨ Summarise';
+      var del=document.createElement('button'); del.className='btn ghost small'; del.textContent='Delete';
+      actions.appendChild(sum); actions.appendChild(del); card.appendChild(actions);
+      if(n.summary){ card.appendChild(summaryBox(n)); }
+      sum.onclick=function(){
+        if(!getKey()){ needKey(); return; }
+        sum.disabled=true; sum.textContent='Working…';
+        claude({ system:'You are helping a 16-year-old student with dyslexia. Summarise the notes into short, simple bullet points using plain words and short sentences. Keep it accurate. You may use a few short headings.', messages:[{role:'user',content:'Summarise these notes:\n\n'+n.text}], max_tokens:700 })
+        .then(function(txt){ n.summary=txt; saveNotes(); renderNotes(); })
+        .catch(function(e){ toast(e.message||'Could not summarise.'); sum.disabled=false; sum.textContent='✨ Summarise'; });
+      };
+      del.onclick=function(){ notes=notes.filter(function(x){return x.id!==n.id;}); saveNotes(); renderNotes(); };
+      wrap.appendChild(card);
+    })(notes[i]); }
+  }
+  function summaryBox(n){
+    var box=document.createElement('div'); box.className='summary-box';
+    var lbl=document.createElement('span'); lbl.className='lbl'; lbl.textContent='Simple summary';
+    var t=document.createElement('div'); t.className='readtext'; t.style.fontSize='19px'; t.textContent=n.summary;
+    box.appendChild(lbl); box.appendChild(t);
+    box.appendChild(makeReadBar(function(){ return n.summary; }));
+    return box;
+  }
+  function addNote(title, text){
+    notes.unshift({ id:'n'+Date.now(), title:title||'', text:text||'', summary:'', ts:Date.now() });
+    saveNotes(); renderNotes();
+  }
+  document.getElementById('saveNote').onclick=function(){
+    var t=document.getElementById('noteText').value.trim();
+    if(!t){ toast('Write something first.'); return; }
+    addNote(document.getElementById('noteTitle').value.trim(), t);
+    document.getElementById('noteTitle').value=''; document.getElementById('noteText').value='';
+    toast('Note saved.');
+  };
+  document.getElementById('clearNote').onclick=function(){ document.getElementById('noteTitle').value=''; document.getElementById('noteText').value=''; };
+
+  /* ---------- SNAP (photo -> text) ---------- */
+  var snapInput=document.getElementById('snapInput');
+  document.getElementById('snapBtn').onclick=function(){ if(!getKey()){ needKey(); return; } snapInput.click(); };
+  snapInput.onchange=function(){
+    var file=snapInput.files[0]; if(!file) return;
+    var prev=document.getElementById('snapPreview'); prev.innerHTML='';
+    var img=document.createElement('img'); img.style.maxWidth='100%'; img.style.borderRadius='12px'; img.src=URL.createObjectURL(file); prev.appendChild(img);
+    var prog=document.getElementById('snapProgress'); prog.innerHTML='<p class="hint">Reading the words in the photo…</p>';
+    fileToB64(file).then(function(b64){
+      return claude({ max_tokens:1500, system:'You carefully read the text in an image of a page from a Hospitality and Catering textbook or worksheet. Output only the text you can see, cleanly, keeping headings and bullet points. Do not add comments.',
+        messages:[{role:'user', content:[ {type:'image', source:{type:'base64', media_type:mediaType(file), data:b64}}, {type:'text', text:'Read all the text on this page.'} ]}] });
+    }).then(function(txt){
+      prog.innerHTML='';
+      var res=document.getElementById('snapResult');
+      res.innerHTML='';
+      var card=document.createElement('div'); card.className='card';
+      var h=document.createElement('h3'); h.className='note-item'; h.style.cssText='font-family:Saira Condensed,sans-serif;color:var(--herb);font-size:22px;margin:0 0 8px;'; h.textContent='What the page says';
+      var body=document.createElement('div'); body.className='readtext'; body.textContent=txt;
+      card.appendChild(h); card.appendChild(body);
+      card.appendChild(makeReadBar(function(){ return txt; }));
+      var save=document.createElement('button'); save.className='btn primary block'; save.style.marginTop='12px'; save.textContent='Save as a note';
+      save.onclick=function(){ addNote('From a photo', txt); toast('Saved to My notes.'); switchTab('notes'); };
+      card.appendChild(save);
+      res.appendChild(card);
+    }).catch(function(e){ prog.innerHTML=''; toast(e.message||'Could not read the photo.'); });
+  };
+
+  /* ---------- RECORD + WHISPER ---------- */
+  var mediaRecorder=null, recChunks=[], recBlob=null, recording=false;
+  var recBtn=document.getElementById('recBtn');
+  recBtn.onclick=function(){
+    if(!recording){ startRec(); } else { stopRec(); }
+  };
+  function startRec(){
+    if(!navigator.mediaDevices||!window.MediaRecorder){ toast('This browser cannot record audio.'); return; }
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+      recChunks=[];
+      try{ mediaRecorder=new MediaRecorder(stream); }catch(e){ mediaRecorder=new MediaRecorder(stream,{mimeType:'audio/mp4'}); }
+      mediaRecorder.ondataavailable=function(e){ if(e.data&&e.data.size) recChunks.push(e.data); };
+      mediaRecorder.onstop=function(){
+        recBlob=new Blob(recChunks,{type:(mediaRecorder.mimeType||'audio/webm')});
+        stream.getTracks().forEach(function(t){t.stop();});
+        showPlayer();
+      };
+      mediaRecorder.start();
+      recording=true; recBtn.textContent='■ Stop recording'; recBtn.classList.remove('tomato'); recBtn.classList.add('primary');
+      document.getElementById('recStatus').textContent='Recording… speak clearly.';
+    }).catch(function(){ toast('Microphone permission was not given.'); });
+  }
+  function stopRec(){ if(mediaRecorder&&recording){ mediaRecorder.stop(); recording=false; recBtn.textContent='● Start recording'; recBtn.classList.add('tomato'); recBtn.classList.remove('primary'); document.getElementById('recStatus').textContent='Recorded. Listen back, or turn it into notes.'; } }
+  function showPlayer(){
+    var wrap=document.getElementById('recPlayer'); wrap.innerHTML='';
+    var audio=document.createElement('audio'); audio.controls=true; audio.style.width='100%'; audio.src=URL.createObjectURL(recBlob);
+    wrap.appendChild(audio);
+    var t=document.createElement('button'); t.className='btn amber block'; t.style.marginTop='12px'; t.textContent='📝 Turn recording into notes';
+    t.onclick=function(){ transcribe(t); };
+    wrap.appendChild(t);
+  }
+  function transcribe(btn){
+    if(!recBlob){ toast('Record something first.'); return; }
+    btn.disabled=true;
+    var prog=document.getElementById('whisperProgress');
+    prog.innerHTML='<p class="hint" id="wLbl">Getting the transcriber ready…</p><div class="progress"><i id="wBar"></i></div>';
+    var bar=document.getElementById('wBar'), lbl=document.getElementById('wLbl');
+    window.SL_loadWhisper(function(p){
+      if(p&&p.status==='progress'&&p.total){ var pct=Math.round(p.loaded/p.total*100); bar.style.width=pct+'%'; lbl.textContent='Downloading language model… '+pct+'%'; }
+      else if(p&&p.status==='ready'){ lbl.textContent='Listening to your recording…'; bar.style.width='100%'; }
+    }).then(function(){
+      lbl.textContent='Listening to your recording…'; bar.style.width='100%';
+      return blobToMono16k(recBlob);
+    }).then(function(f32){
+      return window.SL_transcribe(f32);
+    }).then(function(text){
+      prog.innerHTML='';
+      var res=document.getElementById('recResult'); res.innerHTML='';
+      var card=document.createElement('div'); card.className='card';
+      var h=document.createElement('div'); h.style.cssText='font-family:Saira Condensed,sans-serif;color:var(--herb);font-size:22px;margin:0 0 8px;'; h.textContent='Your recording, in words';
+      var body=document.createElement('div'); body.className='readtext'; body.textContent=text||'(No clear speech was found.)';
+      card.appendChild(h); card.appendChild(body);
+      if(text){ card.appendChild(makeReadBar(function(){ return text; }));
+        var save=document.createElement('button'); save.className='btn primary block'; save.style.marginTop='12px'; save.textContent='Save as a note';
+        save.onclick=function(){ addNote('From a recording', text); toast('Saved to My notes.'); switchTab('notes'); };
+        card.appendChild(save);
+      }
+      res.appendChild(card); btn.disabled=false;
+    }).catch(function(e){
+      prog.innerHTML=''; btn.disabled=false;
+      toast('Could not transcribe here. Try on the laptop for long clips.');
+    });
+  }
+  function blobToMono16k(blob){
+    return blob.arrayBuffer().then(function(buf){
+      var AC=window.AudioContext||window.webkitAudioContext;
+      var tmp=new AC();
+      return tmp.decodeAudioData(buf).then(function(decoded){
+        try{tmp.close();}catch(e){}
+        var OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext;
+        var len=Math.max(1, Math.ceil(decoded.duration*16000));
+        var off=new OAC(1, len, 16000);
+        var src=off.createBufferSource(); src.buffer=decoded; src.connect(off.destination); src.start(0);
+        return off.startRendering();
+      }).then(function(rendered){
+        var ch=rendered.getChannelData(0); var out=new Float32Array(ch.length); out.set(ch); return out;
+      });
+    });
+  }
+
+  /* ---------- ASK (tutor chat) ---------- */
+  var chat=[]; var askImgFile=null;
+  var TUTOR='You are a warm, patient tutor for Marvelous, a 16-year-old student in the UK who has dyslexia. She is studying WJEC Level 1/2 Hospitality and Catering. Always explain in short, simple sentences, one idea at a time. Be encouraging and kind. Help her UNDERSTAND and IMPROVE her own work — never write her coursework or NEA for her to hand in as her own, because that is cheating and could get her disqualified; instead guide her, ask gentle questions, explain ideas with examples, and help her put things in her own words. For the practical exam, give clear, safe, practical tips. Keep answers fairly short unless she asks for more.';
+  function renderChat(){
+    var wrap=document.getElementById('chatWrap'); wrap.innerHTML='';
+    if(!chat.length){ wrap.innerHTML='<p class="empty">Ask a question to begin. For example: "What are the 4 Cs of food safety?" or "Help me understand my coursework task."</p>'; return; }
+    for(var i=0;i<chat.length;i++){ (function(m){
+      var d=document.createElement('div'); d.className='msg '+(m.role==='user'?'me':'ai');
+      d.textContent=(typeof m.display==='string')?m.display:m.content;
+      wrap.appendChild(d);
+      if(m.role==='assistant'){ d.appendChild(makeReadBar(function(){ return m.content; })); }
+    })(chat[i]); }
+    wrap.scrollTop=wrap.scrollHeight;
+  }
+  document.getElementById('askImgBtn').onclick=function(){ document.getElementById('askImg').click(); };
+  document.getElementById('askImg').onchange=function(){
+    askImgFile=this.files[0]||null;
+    var p=document.getElementById('askImgPreview'); p.innerHTML='';
+    if(askImgFile){ var img=document.createElement('img'); img.style.cssText='max-height:120px;border-radius:10px;margin-bottom:8px;'; img.src=URL.createObjectURL(askImgFile); p.appendChild(img); }
+  };
+  document.getElementById('askClear').onclick=function(){ chat=[]; askImgFile=null; document.getElementById('askImgPreview').innerHTML=''; renderChat(); };
+  document.getElementById('askSend').onclick=function(){
+    if(!getKey()){ needKey(); return; }
+    var q=document.getElementById('askInput').value.trim();
+    if(!q && !askImgFile){ toast('Type a question.'); return; }
+    var userMsg={ role:'user', display:q||'(photo)' };
+    var buildContent=function(){ return Promise.resolve(q); };
+    if(askImgFile){
+      var f=askImgFile;
+      buildContent=function(){ return fileToB64(f).then(function(b64){ return [ {type:'image',source:{type:'base64',media_type:mediaType(f),data:b64}}, {type:'text',text:q||'Please help me with this.'} ]; }); };
+    }
+    document.getElementById('askInput').value=''; document.getElementById('askImgPreview').innerHTML=''; askImgFile=null;
+    buildContent().then(function(content){
+      userMsg.content=content; chat.push(userMsg);
+      var thinking={role:'assistant', content:'…', display:'…'}; chat.push(thinking); renderChat();
+      var apiMsgs = chat.filter(function(m){return m!==thinking;}).map(function(m){ return { role:m.role, content:m.content }; });
+      return claude({ system:TUTOR, messages:apiMsgs, max_tokens:1000 }).then(function(ans){
+        chat.pop(); chat.push({role:'assistant', content:ans, display:ans}); renderChat();
+      });
+    }).catch(function(e){
+      if(chat.length && chat[chat.length-1].content==='…') chat.pop();
+      renderChat(); toast(e.message||'Could not get an answer.');
+    });
+  };
+
+  /* ---------- tabs ---------- */
+  function switchTab(name){
+    stopSpeak();
+    var tabs=document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++) tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab')===name);
+    var panels=document.querySelectorAll('.panel'); for(var j=0;j<panels.length;j++) panels[j].classList.remove('active');
+    document.getElementById('p-'+name).classList.add('active');
+    window.scrollTo(0,0);
+  }
+  document.getElementById('tabs').addEventListener('click', function(e){ if(e.target.classList.contains('tab')) switchTab(e.target.getAttribute('data-tab')); });
+
+  /* ---------- settings wiring ---------- */
+  document.getElementById('apiKey').value = getKey();
+  function keyStatus(){ document.getElementById('keyStatus').textContent = getKey() ? 'A key is saved on this device. ✓' : 'No key saved yet.'; }
+  keyStatus();
+  document.getElementById('saveKey').onclick=function(){ var k=document.getElementById('apiKey').value.trim(); if(!k){ toast('Paste a key first.'); return; } localStorage.setItem('sl_apikey', k); keyStatus(); toast('Key saved on this device.'); };
+  document.getElementById('clearKey').onclick=function(){ localStorage.removeItem('sl_apikey'); document.getElementById('apiKey').value=''; keyStatus(); toast('Key removed.'); };
+
+  document.getElementById('rate').addEventListener('input', function(){ settings.rate=parseFloat(this.value); save('sl_settings',settings); applySettings(); });
+  document.getElementById('sizeOpts').addEventListener('click', function(e){ if(!e.target.classList.contains('opt'))return; settings.size=e.target.getAttribute('data-val'); save('sl_settings',settings); applySettings(); });
+  document.getElementById('fontOpts').addEventListener('click', function(e){ if(!e.target.classList.contains('opt'))return; settings.font=e.target.getAttribute('data-val'); save('sl_settings',settings); applySettings(); });
+  document.getElementById('voiceSelect').addEventListener('change', function(){ var i=parseInt(this.value,10); if(voiceList[i]){ voice=voiceList[i]; userChoseVoice=true; settings.voiceName=voice.name; save('sl_settings',settings); speakSample(); } });
+  document.getElementById('testVoice').onclick=function(){ speakSample(); };
+  function speakSample(){ stopSpeak(); var u=new SpeechSynthesisUtterance('Hello Marvelous, this is your study voice.'); if(voice)u.voice=voice; u.lang='en-GB'; u.rate=settings.rate; try{synth.cancel();synth.speak(u);}catch(e){} }
+
+  /* ---------- toast ---------- */
+  var toastTimer=null;
+  function toast(msg){ var el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show'); if(toastTimer) clearTimeout(toastTimer); toastTimer=setTimeout(function(){ el.classList.remove('show'); },3200); }
+
+  document.addEventListener('visibilitychange', function(){ if(document.hidden) stopSpeak(); });
+
+  applySettings(); renderNotes(); renderChat();
+})();
+</script>
+</body>
+</html>
