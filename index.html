@@ -170,10 +170,12 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       <textarea id="askInput" placeholder="Type your question…" style="min-height:90px;"></textarea>
       <div class="row" style="margin-top:10px;">
         <button class="btn primary" id="askSend">Ask</button>
+        <button class="btn tomato" id="askRec">🎤 Talk</button>
         <input type="file" id="askImg" accept="image/*" style="display:none;">
         <button class="btn ghost" id="askImgBtn">📷 Add a photo</button>
         <button class="btn ghost" id="askClear">Clear chat</button>
       </div>
+      <div id="askRecStatus" class="hint"></div>
     </div>
   </section>
 
@@ -191,6 +193,24 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
         <button class="btn ghost" id="clearKey">Remove key</button>
       </div>
       <div id="keyStatus" class="hint"></div>
+    </div>
+
+    <div class="card">
+      <label class="k">Answer model</label>
+      <div class="opts" id="modelOpts">
+        <button class="opt sel" data-val="claude-haiku-4-5-20251001">Cheaper (Haiku)</button>
+        <button class="opt" data-val="claude-sonnet-5">Smarter (Sonnet)</button>
+      </div>
+      <p class="hint">Haiku is fast and very cheap — about a few dollars a month for lots of questions. Switch to Sonnet for harder help.</p>
+
+      <label class="k">Photo key (for Watch &amp; Learn pictures)</label>
+      <p class="hint">Free from <b>unsplash.com/developers</b> — make an app, copy the <b>Access Key</b>. Saved only on this device. Without it, lessons still work with simple picture icons.</p>
+      <input type="password" id="unsplashKey" placeholder="Unsplash Access Key…" autocomplete="off">
+      <div class="row" style="margin-top:10px;">
+        <button class="btn primary" id="saveUnsplash">Save photo key</button>
+        <button class="btn ghost" id="clearUnsplash">Remove</button>
+      </div>
+      <div id="unsplashStatus" class="hint"></div>
     </div>
 
     <div class="card">
@@ -221,6 +241,28 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
 </main>
 
 <div id="toast"></div>
+<!-- WATCH & LEARN overlay -->
+<div id="wl" style="display:none;position:fixed;inset:0;z-index:100;background:#26201f;color:#F7F3E8;flex-direction:column;">
+  <div style="display:flex;align-items:center;gap:10px;padding:calc(12px + env(safe-area-inset-top,0)) 16px 12px;">
+    <b style="font-family:'Saira Condensed',sans-serif;text-transform:uppercase;letter-spacing:.6px;font-size:20px;">Watch &amp; Learn</b>
+    <span id="wlCount" style="opacity:.7;font-size:14px;"></span>
+    <button id="wlExit" style="margin-left:auto;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:20px;width:40px;height:40px;border-radius:10px;cursor:pointer;">✕</button>
+  </div>
+  <div id="wlBody" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:8px 18px 20px;text-align:center;">
+    <div id="wlImgWrap" style="width:100%;max-width:560px;aspect-ratio:16/10;background:#3a322f;border-radius:18px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:90px;">📘</div>
+    <div id="wlLine" style="font-family:'Lexend',sans-serif;font-size:30px;line-height:1.35;font-weight:600;margin:22px 0 0;max-width:640px;"></div>
+    <div id="wlSay" style="font-family:'Lexend',sans-serif;font-size:19px;line-height:1.7;opacity:.92;margin:16px 0 0;max-width:640px;"></div>
+    <div id="wlCredit" style="opacity:.5;font-size:12px;margin-top:12px;"></div>
+    <div id="wlCheck" style="display:none;width:100%;max-width:640px;"></div>
+  </div>
+  <div id="wlControls" style="padding:12px 16px calc(16px + env(safe-area-inset-bottom,0));background:rgba(0,0,0,.2);">
+    <div style="display:flex;gap:10px;max-width:640px;margin:0 auto;">
+      <button id="wlBack" class="btn ghost" style="flex:1;">‹ Back</button>
+      <button id="wlPlay" class="btn amber" style="flex:2;">⏸ Pause</button>
+      <button id="wlNext" class="btn ghost" style="flex:1;">Next ›</button>
+    </div>
+  </div>
+</div>
 <footer>
   <p class="verse">"Commit thy works unto the LORD, and thy thoughts shall be established." — Proverbs 16:3</p>
   <p class="amhg">Glory to God alone · AMHG</p>
@@ -271,6 +313,8 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
 
   /* ---------- API key ---------- */
   function getKey(){ return localStorage.getItem('sl_apikey')||''; }
+  function getUnsplash(){ return localStorage.getItem('sl_unsplash')||''; }
+  function currentModel(){ return localStorage.getItem('sl_model')||'claude-haiku-4-5-20251001'; }
   function needKey(){ toast('Add your Anthropic key in Settings first.'); switchTab('settings'); }
 
   /* ---------- Claude call ---------- */
@@ -280,7 +324,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     return fetch("https://api.anthropic.com/v1/messages", {
       method:"POST",
       headers:{ "content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true" },
-      body: JSON.stringify({ model: opts.model||'claude-sonnet-5', max_tokens: opts.max_tokens||1200, system: opts.system||undefined, messages: opts.messages })
+      body: JSON.stringify({ model: opts.model||currentModel(), max_tokens: opts.max_tokens||1200, system: opts.system||undefined, messages: opts.messages })
     }).then(function(res){
       return res.text().then(function(t){
         if(!res.ok){
@@ -392,11 +436,15 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   var notes = load('sl_notes', []);
   function saveNotes(){ save('sl_notes', notes); }
   var editingId=null;
+  function dayKey(ts){ var d=new Date(ts); return d.toLocaleDateString(undefined,{weekday:'long',year:'numeric',month:'long',day:'numeric'}); }
   function renderNotes(){
     var wrap=document.getElementById('notesList'); wrap.innerHTML='';
     readBars=[]; // rebuild bars
     if(!notes.length){ wrap.innerHTML='<p class="empty">No notes yet. Write one above, or use Snap a Page or Record to make one.</p>'; return; }
+    var lastDay=null;
     for(var i=0;i<notes.length;i++){ (function(n){
+      var dk=dayKey(n.ts);
+      if(dk!==lastDay){ lastDay=dk; var hd=document.createElement('div'); hd.style.cssText='font-family:Saira Condensed,sans-serif;text-transform:uppercase;letter-spacing:1px;font-size:15px;color:var(--herb);font-weight:700;margin:18px 0 8px;'; hd.textContent=dk; wrap.appendChild(hd); }
       if(n.id===editingId){ wrap.appendChild(editCard(n)); return; }
       var card=document.createElement('div'); card.className='card note-item';
       var h=document.createElement('h3'); h.textContent=n.title||'Untitled note';
@@ -405,11 +453,13 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       card.appendChild(h); card.appendChild(meta); card.appendChild(body);
       card.appendChild(makeReadBar(function(){ return (n.title?n.title+'. ':'')+n.text; }));
       var actions=document.createElement('div'); actions.className='row'; actions.style.marginTop='10px';
+      var watch=document.createElement('button'); watch.className='btn amber small'; watch.textContent='🎬 Watch & Learn';
       var sum=document.createElement('button'); sum.className='btn primary small'; sum.textContent='✨ Summarise';
       var edit=document.createElement('button'); edit.className='btn ghost small'; edit.textContent='✏️ Edit';
-      var del=document.createElement('button'); del.className='btn ghost small'; del.textContent='Delete';
-      actions.appendChild(sum); actions.appendChild(edit); actions.appendChild(del); card.appendChild(actions);
+      var del=document.createElement('button'); del.className='btn ghost small'; del.textContent='🗑 Delete';
+      actions.appendChild(watch); actions.appendChild(sum); actions.appendChild(edit); actions.appendChild(del); card.appendChild(actions);
       if(n.summary){ card.appendChild(summaryBox(n)); }
+      watch.onclick=function(){ startWatchLearn(n); };
       edit.onclick=function(){ stopSpeak(); editingId=n.id; renderNotes(); };
       sum.onclick=function(){
         if(!getKey()){ needKey(); return; }
@@ -490,6 +540,9 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       var save=document.createElement('button'); save.className='btn primary block'; save.style.marginTop='12px'; save.textContent='Save as a note';
       save.onclick=function(){ addNote('From a photo', txt); toast('Saved to My notes.'); switchTab('notes'); };
       card.appendChild(save);
+      var dz=document.createElement('button'); dz.className='btn ghost block'; dz.style.marginTop='8px'; dz.textContent='🗑 Delete this';
+      dz.onclick=function(){ res.innerHTML=''; document.getElementById('snapPreview').innerHTML=''; };
+      card.appendChild(dz);
       res.appendChild(card);
     }).catch(function(e){ prog.innerHTML=''; toast(e.message||'Could not read the photo.'); });
   };
@@ -524,6 +577,9 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     var t=document.createElement('button'); t.className='btn amber block'; t.style.marginTop='12px'; t.textContent='📝 Turn recording into notes';
     t.onclick=function(){ transcribe(t); };
     wrap.appendChild(t);
+    var d=document.createElement('button'); d.className='btn ghost block'; d.style.marginTop='8px'; d.textContent='🗑 Delete recording';
+    d.onclick=function(){ recBlob=null; wrap.innerHTML=''; document.getElementById('recResult').innerHTML=''; document.getElementById('whisperProgress').innerHTML=''; document.getElementById('recStatus').textContent=''; };
+    wrap.appendChild(d);
   }
   function isPhone(){ return /iPhone|Android.*Mobile|Windows Phone/i.test(navigator.userAgent) || Math.min(screen.width,screen.height) < 480; }
   function transcribe(btn){
@@ -600,6 +656,31 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     if(askImgFile){ var img=document.createElement('img'); img.style.cssText='max-height:120px;border-radius:10px;margin-bottom:8px;'; img.src=URL.createObjectURL(askImgFile); p.appendChild(img); }
   };
   document.getElementById('askClear').onclick=function(){ chat=[]; askImgFile=null; document.getElementById('askImgPreview').innerHTML=''; renderChat(); };
+
+  /* record straight into the Ask question box */
+  var askRec=null, askChunks=[], askRecording=false;
+  document.getElementById('askRec').onclick=function(){
+    var btn=this, st=document.getElementById('askRecStatus');
+    if(askRecording){ if(askRec) askRec.stop(); return; }
+    if(!navigator.mediaDevices||!window.MediaRecorder){ toast('This browser cannot record.'); return; }
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+      askChunks=[]; try{ askRec=new MediaRecorder(stream); }catch(e){ askRec=new MediaRecorder(stream,{mimeType:'audio/mp4'}); }
+      askRec.ondataavailable=function(e){ if(e.data&&e.data.size) askChunks.push(e.data); };
+      askRec.onstop=function(){
+        var blob=new Blob(askChunks,{type:(askRec.mimeType||'audio/webm')}); stream.getTracks().forEach(function(t){t.stop();});
+        if(isPhone()){ st.textContent='On a phone, use the keyboard microphone in the box instead.'; return; }
+        st.textContent='Turning your words into text…';
+        window.SL_loadWhisper(function(p){ if(p&&p.status==='progress'&&p.total){ st.textContent='Getting ready… '+Math.round(p.loaded/p.total*100)+'%'; } })
+          .then(function(){ return blobToMono16k(blob); })
+          .then(function(f32){ return window.SL_transcribe(f32); })
+          .then(function(text){ var ta=document.getElementById('askInput'); ta.value=(ta.value?ta.value+' ':'')+(text||''); st.textContent='Added. Check it, then tap Ask.'; })
+          .catch(function(){ st.textContent='Could not transcribe here — try typing, or the keyboard mic.'; });
+      };
+      askRec.start(); askRecording=true; btn.textContent='■ Stop'; st.textContent='Listening… tap Stop when done.';
+    }).catch(function(){ toast('Microphone permission not given.'); });
+    // reset flag when stopped
+    var iv=setInterval(function(){ if(askRec && askRec.state==='inactive'){ askRecording=false; document.getElementById('askRec').textContent='🎤 Talk'; clearInterval(iv); } }, 400);
+  };
   document.getElementById('askSend').onclick=function(){
     if(!getKey()){ needKey(); return; }
     var q=document.getElementById('askInput').value.trim();
@@ -624,6 +705,125 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     });
   };
 
+  /* ---------- photos (Unsplash) ---------- */
+  var photoCache={};
+  function fetchPhoto(query){
+    var key=getUnsplash();
+    if(!key) return Promise.resolve(null);
+    if(photoCache[query]) return Promise.resolve(photoCache[query]);
+    return fetch('https://api.unsplash.com/search/photos?per_page=1&orientation=landscape&content_filter=high&query='+encodeURIComponent(query), { headers:{ 'Authorization':'Client-ID '+key } })
+      .then(function(r){ if(!r.ok) throw new Error('photo'); return r.json(); })
+      .then(function(d){ var it=(d.results&&d.results[0]); if(!it) return null; var out={url:it.urls.regular||it.urls.small, credit:(it.user&&it.user.name)?('Photo: '+it.user.name+' / Unsplash'):'Photo: Unsplash'}; photoCache[query]=out; return out; })
+      .catch(function(){ return null; });
+  }
+  var EMOJI={fridge:'🧊',freezer:'🧊',thermometer:'🌡️',temperature:'🌡️',chicken:'🍗',meat:'🥩',knife:'🔪',board:'🔪',clean:'🧼',wash:'🧼',soap:'🧼',hands:'🧼',bacteria:'🦠',germ:'🦠',allergy:'⚠️',allergen:'⚠️',kitchen:'🍳',cook:'🍳',oven:'🔥',fire:'🔥',food:'🍽️',plate:'🍽️',fish:'🐟',egg:'🥚',milk:'🥛',fruit:'🍎',vegetable:'🥦',bread:'🍞',rubbish:'🗑️',bin:'🗑️',toilet:'🚽',rating:'⭐',star:'⭐',money:'💷',people:'👥',customer:'👥',hat:'👩‍🍳',apron:'👩‍🍳'};
+  function emojiFor(q){ q=(q||'').toLowerCase(); for(var k in EMOJI){ if(q.indexOf(k)>=0) return EMOJI[k]; } return '📘'; }
+
+  /* ---------- WATCH & LEARN ---------- */
+  var wl={ slides:[], concepts:[], i:0, paused:false, playing:false, lesson:null };
+  function buildScript(lesson){
+    var content=(lesson.title?lesson.title+'\n\n':'')+lesson.text+(lesson.summary?('\n\nSummary:\n'+lesson.summary):'');
+    var sys='You turn a lesson into a simple picture-lesson for a 16-year-old with dyslexia. Break it into 5 to 8 short steps. Return ONLY valid JSON, no markdown, in this shape: {"slides":[{"line":"very short on-screen text, max 8 words","image":"a real everyday photo search phrase, 2 to 4 words, a concrete object or scene","say":"2 to 4 short simple sentences that explain this step and give a real-life example"}],"concepts":["three short main ideas to check at the end"]}. Keep language plain and kind.';
+    return claude({ system:sys, messages:[{role:'user', content:'Make a picture-lesson from this:\n\n'+content}], max_tokens:1600, model:currentModel() })
+      .then(function(txt){
+        var clean=txt.replace(/```json/gi,'').replace(/```/g,'').trim();
+        var start=clean.indexOf('{'), end=clean.lastIndexOf('}');
+        if(start>=0&&end>=0) clean=clean.slice(start,end+1);
+        var obj=JSON.parse(clean);
+        if(!obj.slides||!obj.slides.length) throw new Error('empty');
+        return obj;
+      });
+  }
+  function startWatchLearn(lesson){
+    if(!getKey()){ needKey(); return; }
+    wl.lesson=lesson;
+    var wlEl=document.getElementById('wl'); wlEl.style.display='flex';
+    document.getElementById('wlCheck').style.display='none';
+    document.getElementById('wlControls').style.display='block';
+    document.getElementById('wlLine').textContent='Getting your lesson ready…';
+    document.getElementById('wlSay').textContent=''; document.getElementById('wlImgWrap').textContent='📘'; document.getElementById('wlCredit').textContent='';
+    document.getElementById('wlCount').textContent='';
+    var go=function(obj){ wl.slides=obj.slides; wl.concepts=obj.concepts||[]; lesson.script=obj; saveNotes(); wl.i=0; wl.paused=false; wl.playing=true; showSlide(); };
+    if(lesson.script && lesson.script.slides){ go(lesson.script); }
+    else { buildScript(lesson).then(go).catch(function(e){ toast('Could not build the lesson. Try again.'); closeWL(); }); }
+  }
+  function showSlide(){
+    if(wl.i>=wl.slides.length){ showCheck(); return; }
+    var s=wl.slides[wl.i];
+    document.getElementById('wlCount').textContent=(wl.i+1)+' of '+wl.slides.length;
+    document.getElementById('wlLine').textContent=s.line||'';
+    document.getElementById('wlSay').textContent=s.say||'';
+    var wrap=document.getElementById('wlImgWrap'), credit=document.getElementById('wlCredit');
+    wrap.textContent=emojiFor(s.image); credit.textContent='';
+    fetchPhoto(s.image).then(function(p){
+      if(p && wl.playing){ wrap.innerHTML='<img src="'+p.url+'" style="width:100%;height:100%;object-fit:cover;" alt="">'; credit.textContent=p.credit; }
+    });
+    narrate(s.say||s.line||'', function(){ if(wl.playing && !wl.paused){ setTimeout(function(){ if(wl.playing&&!wl.paused){ wl.i++; showSlide(); } }, 700); } });
+  }
+  function narrate(text, done){
+    stopSpeak();
+    var chunks=splitSentences(text); var idx=0;
+    function next(){
+      if(!wl.playing||wl.paused) return;
+      if(idx>=chunks.length){ if(done) done(); return; }
+      var u=new SpeechSynthesisUtterance(chunks[idx]); if(voice)u.voice=voice; u.lang='en-GB'; u.rate=settings.rate;
+      u.onend=function(){ if(wl.playing&&!wl.paused){ idx++; setTimeout(next, gap()); } };
+      u.onerror=function(){ if(wl.playing&&!wl.paused){ idx++; setTimeout(next, gap()); } };
+      try{ synth.cancel(); synth.speak(u); }catch(e){}
+    }
+    next();
+  }
+  function wlSetPlay(){ document.getElementById('wlPlay').textContent = wl.paused ? '▶ Continue' : '⏸ Pause'; }
+  function showCheck(){
+    wl.playing=false; stopSpeak();
+    document.getElementById('wlControls').style.display='none';
+    document.getElementById('wlImgWrap').textContent='🎉'; document.getElementById('wlImgWrap').innerHTML='🎉';
+    document.getElementById('wlLine').textContent='Well done! Did you understand these?';
+    document.getElementById('wlSay').textContent='Tap ✓ if you get it, or ✗ if you want more help.';
+    document.getElementById('wlCredit').textContent='';
+    var box=document.getElementById('wlCheck'); box.style.display='block'; box.innerHTML='';
+    var cs=wl.concepts.length?wl.concepts:['This lesson'];
+    for(var i=0;i<cs.length;i++){ (function(concept){
+      var row=document.createElement('div'); row.className='card'; row.style.cssText='background:#3a322f;border-color:#4a4340;color:#F7F3E8;text-align:left;';
+      var t=document.createElement('div'); t.style.cssText='font-size:18px;margin-bottom:10px;'; t.textContent=concept;
+      var r=document.createElement('div'); r.className='row';
+      var yes=document.createElement('button'); yes.className='btn'; yes.style.cssText='background:#3f7d4f;color:#fff;'; yes.textContent='✓ I get this';
+      var no=document.createElement('button'); no.className='btn amber'; no.textContent='✗ I don\u2019t';
+      r.appendChild(yes); r.appendChild(no); row.appendChild(t); row.appendChild(r);
+      var help=document.createElement('div'); help.style.marginTop='10px'; row.appendChild(help);
+      yes.onclick=function(){ yes.style.opacity='.5'; no.style.opacity='1'; help.innerHTML='<div style="opacity:.85;">Great! 🎉</div>'; };
+      no.onclick=function(){ no.style.opacity='.5'; yes.style.opacity='1'; conceptHelp(concept, help); };
+      box.appendChild(row);
+    })(cs[i]); }
+    var doneBtn=document.createElement('button'); doneBtn.className='btn primary block'; doneBtn.style.marginTop='6px'; doneBtn.textContent='Finish';
+    doneBtn.onclick=closeWL; box.appendChild(doneBtn);
+  }
+  function conceptHelp(concept, container){
+    container.innerHTML='<div style="opacity:.85;">Getting simpler words…</div>';
+    var yt=function(q){ return 'https://www.youtube.com/results?search_query='+encodeURIComponent(q); };
+    claude({ system:'Explain to a 16-year-old with dyslexia in 2 or 3 very short, kind sentences with an everyday example.', messages:[{role:'user',content:'Explain simply: '+concept+' (in Hospitality and Catering).'}], max_tokens:250 })
+    .then(function(ans){
+      container.innerHTML='';
+      var ex=document.createElement('div'); ex.style.cssText='background:#2b2523;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:17px;line-height:1.6;'; ex.textContent=ans;
+      var rb=makeReadBar(function(){ return ans; }); 
+      var links=document.createElement('div'); links.className='row';
+      var l1=document.createElement('a'); l1.href=yt(concept+' hospitality catering GCSE'); l1.target='_blank'; l1.className='btn tomato small'; l1.style.textDecoration='none'; l1.textContent='▶ Videos on this';
+      var l2=document.createElement('a'); l2.href=yt(concept+' explained simply'); l2.target='_blank'; l2.className='btn ghost small'; l2.style.textDecoration='none'; l2.textContent='▶ Explained simply';
+      links.appendChild(l1); links.appendChild(l2);
+      container.appendChild(ex); container.appendChild(rb); container.appendChild(links);
+    }).catch(function(){
+      container.innerHTML='';
+      var links=document.createElement('div'); links.className='row';
+      var l1=document.createElement('a'); l1.href=yt(concept+' hospitality catering GCSE'); l1.target='_blank'; l1.className='btn tomato small'; l1.style.textDecoration='none'; l1.textContent='▶ Videos on this';
+      links.appendChild(l1); container.appendChild(links);
+    });
+  }
+  function closeWL(){ wl.playing=false; wl.paused=false; stopSpeak(); document.getElementById('wl').style.display='none'; document.getElementById('wlImgWrap').innerHTML='📘'; }
+  document.getElementById('wlExit').onclick=closeWL;
+  document.getElementById('wlPlay').onclick=function(){ if(!wl.playing) return; if(wl.paused){ wl.paused=false; wlSetPlay(); showSlide(); } else { wl.paused=true; stopSpeak(); wlSetPlay(); } };
+  document.getElementById('wlNext').onclick=function(){ if(!wl.playing) return; stopSpeak(); wl.paused=false; wlSetPlay(); wl.i++; showSlide(); };
+  document.getElementById('wlBack').onclick=function(){ if(!wl.playing) return; stopSpeak(); wl.paused=false; wlSetPlay(); wl.i=Math.max(0,wl.i-1); showSlide(); };
+
   /* ---------- tabs ---------- */
   function switchTab(name){
     stopSpeak();
@@ -640,6 +840,17 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   keyStatus();
   document.getElementById('saveKey').onclick=function(){ var k=document.getElementById('apiKey').value.trim(); if(!k){ toast('Paste a key first.'); return; } localStorage.setItem('sl_apikey', k); keyStatus(); toast('Key saved on this device.'); };
   document.getElementById('clearKey').onclick=function(){ localStorage.removeItem('sl_apikey'); document.getElementById('apiKey').value=''; keyStatus(); toast('Key removed.'); };
+
+  // model toggle
+  (function(){ var m=currentModel(); var g=document.getElementById('modelOpts'); var k=g.querySelectorAll('.opt'); for(var i=0;i<k.length;i++) k[i].classList.toggle('sel', k[i].getAttribute('data-val')===m); })();
+  document.getElementById('modelOpts').addEventListener('click', function(e){ if(!e.target.classList.contains('opt'))return; var k=this.querySelectorAll('.opt'); for(var i=0;i<k.length;i++) k[i].classList.remove('sel'); e.target.classList.add('sel'); localStorage.setItem('sl_model', e.target.getAttribute('data-val')); toast('Model set.'); });
+
+  // unsplash key
+  document.getElementById('unsplashKey').value = getUnsplash();
+  function uStatus(){ document.getElementById('unsplashStatus').textContent = getUnsplash() ? 'Photo key saved. ✓' : 'No photo key — lessons will use simple icons.'; }
+  uStatus();
+  document.getElementById('saveUnsplash').onclick=function(){ var k=document.getElementById('unsplashKey').value.trim(); if(!k){ toast('Paste the Access Key first.'); return; } localStorage.setItem('sl_unsplash', k); photoCache={}; uStatus(); toast('Photo key saved.'); };
+  document.getElementById('clearUnsplash').onclick=function(){ localStorage.removeItem('sl_unsplash'); document.getElementById('unsplashKey').value=''; uStatus(); toast('Photo key removed.'); };
 
   document.getElementById('rate').addEventListener('input', function(){ settings.rate=parseFloat(this.value); save('sl_settings',settings); applySettings(); });
   document.getElementById('sizeOpts').addEventListener('click', function(e){ if(!e.target.classList.contains('opt'))return; settings.size=e.target.getAttribute('data-val'); save('sl_settings',settings); applySettings(); });
