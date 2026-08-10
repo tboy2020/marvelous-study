@@ -156,7 +156,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       <div id="whisperProgress"></div>
     </div>
     <div id="recResult"></div>
-    <p class="hint">Turning a recording into words works best on the <b>iPad or laptop</b> — it is too heavy for a phone. On a phone, use the keyboard microphone in Notes instead. First time, it downloads a small language model (about 40MB), then works offline.</p>
+    <p class="hint">Turning a recording into words works best on the <b>laptop</b> (it is too heavy for a phone). First time, it downloads a small language model (about 75MB), then it works offline and runs fast on a strong laptop.</p>
   </section>
 
   <!-- ASK -->
@@ -235,7 +235,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     window.SL_whisperState = 'loading';
     const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3/+esm');
     env.allowLocalModels = false;
-    asr = await pipeline('automatic-speech-recognition','Xenova/whisper-tiny.en',{ dtype:'q8', progress_callback: progressCb });
+    asr = await pipeline('automatic-speech-recognition','Xenova/whisper-base.en',{ progress_callback: progressCb });
     window.SL_whisperState = 'ready';
     return asr;
   };
