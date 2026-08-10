@@ -91,6 +91,16 @@ footer .amhg{font-family:'Saira Condensed',sans-serif;text-transform:uppercase;l
 button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-offset:2px;}
 @media(prefers-reduced-motion:reduce){*{transition-duration:.001ms!important;}}
 .empty{color:var(--ink-soft);font-size:15.5px;line-height:1.6;}
+/* Watch & Learn motion */
+@keyframes kbA{0%{transform:scale(1.05) translate(0,0);}100%{transform:scale(1.18) translate(-3%,-2%);}}
+@keyframes kbB{0%{transform:scale(1.18) translate(3%,2%);}100%{transform:scale(1.05) translate(0,0);}}
+@keyframes kbC{0%{transform:scale(1.06) translate(2%,-1%);}100%{transform:scale(1.16) translate(-2%,2%);}}
+@keyframes kbD{0%{transform:scale(1.16) translate(-2%,1%);}100%{transform:scale(1.06) translate(2%,-2%);}}
+@keyframes wlFadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:none;}}
+@keyframes wlFloat{0%{transform:translateY(0) rotate(-2deg);}50%{transform:translateY(-14px) rotate(2deg);}100%{transform:translateY(0) rotate(-2deg);}}
+.wl-kb{width:100%;height:100%;object-fit:cover;will-change:transform;animation-timing-function:ease-in-out;animation-iteration-count:infinite;animation-direction:alternate;}
+.wl-emoji{font-size:96px;animation:wlFloat 3.4s ease-in-out infinite;}
+.wl-fade{animation:wlFadeUp .5s ease both;}
 </style>
 </head>
 <body>
@@ -747,16 +757,30 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     if(lesson.script && lesson.script.slides){ go(lesson.script); }
     else { buildScript(lesson).then(go).catch(function(e){ toast('Could not build the lesson. Try again.'); closeWL(); }); }
   }
+  var KB=['kbA','kbB','kbC','kbD'];
+  function animIn(el){ el.style.animation='none'; void el.offsetWidth; el.classList.add('wl-fade'); el.style.animation=''; }
   function showSlide(){
     if(wl.i>=wl.slides.length){ showCheck(); return; }
     var s=wl.slides[wl.i];
     document.getElementById('wlCount').textContent=(wl.i+1)+' of '+wl.slides.length;
-    document.getElementById('wlLine').textContent=s.line||'';
-    document.getElementById('wlSay').textContent=s.say||'';
+    var lineEl=document.getElementById('wlLine'), sayEl=document.getElementById('wlSay');
+    lineEl.textContent=s.line||''; sayEl.textContent=s.say||'';
+    animIn(lineEl); animIn(sayEl);
     var wrap=document.getElementById('wlImgWrap'), credit=document.getElementById('wlCredit');
-    wrap.textContent=emojiFor(s.image); credit.textContent='';
+    wrap.innerHTML='<div class="wl-emoji">'+emojiFor(s.image)+'</div>'; credit.textContent='';
+    var kb=KB[wl.i % KB.length];
     fetchPhoto(s.image).then(function(p){
-      if(p && wl.playing){ wrap.innerHTML='<img src="'+p.url+'" style="width:100%;height:100%;object-fit:cover;" alt="">'; credit.textContent=p.credit; }
+      if(p && wl.playing && wl.i<wl.slides.length && wl.slides[wl.i]===s){
+        var img=new Image();
+        img.onload=function(){
+          if(!wl.playing || wl.slides[wl.i]!==s) return;
+          img.className='wl-kb'; img.style.opacity='0'; img.style.transition='opacity .7s ease';
+          img.style.animation=kb+' 14s ease-in-out infinite alternate'; wrap.innerHTML=''; wrap.appendChild(img);
+          requestAnimationFrame(function(){ img.style.opacity='1'; });
+          credit.textContent=p.credit;
+        };
+        img.src=p.url;
+      }
     });
     narrate(s.say||s.line||'', function(){ if(wl.playing && !wl.paused){ setTimeout(function(){ if(wl.playing&&!wl.paused){ wl.i++; showSlide(); } }, 700); } });
   }
