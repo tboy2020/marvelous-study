@@ -391,11 +391,13 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   /* ---------- NOTES ---------- */
   var notes = load('sl_notes', []);
   function saveNotes(){ save('sl_notes', notes); }
+  var editingId=null;
   function renderNotes(){
     var wrap=document.getElementById('notesList'); wrap.innerHTML='';
     readBars=[]; // rebuild bars
     if(!notes.length){ wrap.innerHTML='<p class="empty">No notes yet. Write one above, or use Snap a Page or Record to make one.</p>'; return; }
     for(var i=0;i<notes.length;i++){ (function(n){
+      if(n.id===editingId){ wrap.appendChild(editCard(n)); return; }
       var card=document.createElement('div'); card.className='card note-item';
       var h=document.createElement('h3'); h.textContent=n.title||'Untitled note';
       var meta=document.createElement('div'); meta.className='meta'; meta.textContent=new Date(n.ts).toLocaleString();
@@ -404,9 +406,11 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       card.appendChild(makeReadBar(function(){ return (n.title?n.title+'. ':'')+n.text; }));
       var actions=document.createElement('div'); actions.className='row'; actions.style.marginTop='10px';
       var sum=document.createElement('button'); sum.className='btn primary small'; sum.textContent='✨ Summarise';
+      var edit=document.createElement('button'); edit.className='btn ghost small'; edit.textContent='✏️ Edit';
       var del=document.createElement('button'); del.className='btn ghost small'; del.textContent='Delete';
-      actions.appendChild(sum); actions.appendChild(del); card.appendChild(actions);
+      actions.appendChild(sum); actions.appendChild(edit); actions.appendChild(del); card.appendChild(actions);
       if(n.summary){ card.appendChild(summaryBox(n)); }
+      edit.onclick=function(){ stopSpeak(); editingId=n.id; renderNotes(); };
       sum.onclick=function(){
         if(!getKey()){ needKey(); return; }
         sum.disabled=true; sum.textContent='Working…';
@@ -417,6 +421,30 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       del.onclick=function(){ notes=notes.filter(function(x){return x.id!==n.id;}); saveNotes(); renderNotes(); };
       wrap.appendChild(card);
     })(notes[i]); }
+  }
+  function editCard(n){
+    var card=document.createElement('div'); card.className='card note-item';
+    var l1=document.createElement('label'); l1.className='k'; l1.textContent='Title'; l1.style.marginTop='0';
+    var ti=document.createElement('input'); ti.type='text'; ti.value=n.title||''; ti.placeholder='Title';
+    var l2=document.createElement('label'); l2.className='k'; l2.textContent='Note';
+    var ta=document.createElement('textarea'); ta.value=n.text||'';
+    var hint=document.createElement('p'); hint.className='hint'; hint.innerHTML='Tip: tap the <b>keyboard microphone</b> to add more by talking.';
+    var row=document.createElement('div'); row.className='row'; row.style.marginTop='12px';
+    var save=document.createElement('button'); save.className='btn primary'; save.textContent='Save changes';
+    var cancel=document.createElement('button'); cancel.className='btn ghost'; cancel.textContent='Cancel';
+    row.appendChild(save); row.appendChild(cancel);
+    card.appendChild(l1); card.appendChild(ti); card.appendChild(l2); card.appendChild(ta); card.appendChild(hint); card.appendChild(row);
+    save.onclick=function(){
+      var newText=ta.value.trim();
+      if(!newText){ toast('The note cannot be empty.'); return; }
+      var changed = (newText!==n.text) || (ti.value.trim()!==(n.title||''));
+      n.title=ti.value.trim(); n.text=newText; n.ts=Date.now();
+      if(changed && n.summary){ n.summary=''; } // old summary no longer matches — clear it
+      editingId=null; saveNotes(); renderNotes(); toast('Note updated.');
+    };
+    cancel.onclick=function(){ editingId=null; renderNotes(); };
+    setTimeout(function(){ ta.focus(); }, 30);
+    return card;
   }
   function summaryBox(n){
     var box=document.createElement('div'); box.className='summary-box';
