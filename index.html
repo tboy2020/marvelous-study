@@ -409,11 +409,24 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   }
   if(synth){ loadVoice(); if(typeof synth.onvoiceschanged!=='undefined') synth.onvoiceschanged=loadVoice; }
 
+  function cleanSpeech(t){
+    t=(t||'').replace(/\r/g,'');
+    t=t.replace(/\[\d{1,2}:\d{2}\]/g,' ');                  // timestamps
+    t=t.replace(/\[([^\]]+)\]\([^)]*\)/g,'$1');              // links -> text
+    t=t.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g,' ');      // emoji (astral pairs)
+    t=t.replace(/[\u2190-\u27BF\u2B00-\u2BFF\u2600-\u26FF\u2022\uFE0F]/g,' '); // symbols, arrows, bullets
+    t=t.replace(/```+/g,' ').replace(/`/g,' ');              // code ticks
+    t=t.replace(/[*_~]{1,3}/g,' ');                          // * _ ~ emphasis
+    t=t.replace(/^\s{0,3}#{1,6}\s*/gm,'');                   // # headings
+    t=t.replace(/^\s{0,3}[-•]\s+/gm,'');                     // - bullets
+    t=t.replace(/^\s{0,3}>\s?/gm,'');                        // > quotes
+    return t;
+  }
   function splitSentences(text){
-    var t=(text||'').replace(/\r/g,'').replace(/\[\d{1,2}:\d{2}\]/g,' ');
+    var t=cleanSpeech(text);
     t=t.replace(/([.!?:])\s+/g,'$1\u0001').replace(/\n+/g,'\u0001');
     var parts=t.split('\u0001');
-    var out=[]; for(var i=0;i<parts.length;i++){ var s=parts[i].trim(); if(s) out.push(s); } return out;
+    var out=[]; for(var i=0;i<parts.length;i++){ var s=parts[i].trim().replace(/\s+/g,' '); if(s) out.push(s); } return out;
   }
   function gap(){ return Math.round(320 - (settings.rate-0.5)*260); } // ~320ms slow .. ~180ms fast
 
@@ -493,7 +506,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       sum.onclick=function(){
         if(!getKey()){ needKey(); return; }
         sum.disabled=true; sum.textContent='Working…';
-        claude({ system:'You are helping a 16-year-old student with dyslexia. Summarise the notes into short, simple bullet points using plain words and short sentences. Keep it accurate. You may use a few short headings.', messages:[{role:'user',content:'Summarise these notes:\n\n'+n.text}], max_tokens:700 })
+        claude({ system:'You are helping a 16-year-old student with dyslexia. Summarise the notes into short, simple points using plain words and short sentences. Keep it accurate. Do not use markdown, asterisks, hash signs, or emojis. Start a new line for each point. You may use a short plain heading followed by a colon.', messages:[{role:'user',content:'Summarise these notes:\n\n'+n.text}], max_tokens:700 })
         .then(function(txt){ n.summary=txt; saveNotes(); renderNotes(); })
         .catch(function(e){ toast(e.message||'Could not summarise.'); sum.disabled=false; sum.textContent='✨ Summarise'; });
       };
@@ -728,7 +741,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
 
   /* ---------- ASK (tutor chat) ---------- */
   var chat=[]; var askImgFile=null;
-  var TUTOR='You are a warm, patient tutor for Marvelous, a 16-year-old student in the UK who has dyslexia. She is studying WJEC Level 1/2 Hospitality and Catering. Always explain in short, simple sentences, one idea at a time. Be encouraging and kind. Help her UNDERSTAND and IMPROVE her own work — never write her coursework or NEA for her to hand in as her own, because that is cheating and could get her disqualified; instead guide her, ask gentle questions, explain ideas with examples, and help her put things in her own words. For the practical exam, give clear, safe, practical tips. Keep answers fairly short unless she asks for more.';
+  var TUTOR='You are a warm, patient tutor for Marvelous, a 16-year-old student in the UK who has dyslexia. She is studying WJEC Level 1/2 Hospitality and Catering. Always explain in short, simple sentences, one idea at a time. Be encouraging and kind. Help her UNDERSTAND and IMPROVE her own work — never write her coursework or NEA for her to hand in as her own, because that is cheating and could get her disqualified; instead guide her, ask gentle questions, explain ideas with examples, and help her put things in her own words. For the practical exam, give clear, safe, practical tips. Keep answers fairly short unless she asks for more. Write in plain sentences only. Do not use markdown, asterisks, hash signs, bullet symbols, or emojis — just clear words and full stops.';
   function renderChat(){
     var wrap=document.getElementById('chatWrap'); wrap.innerHTML='';
     if(!chat.length){ wrap.innerHTML='<p class="empty">Ask a question to begin. For example: "What are the 4 Cs of food safety?" or "Help me understand my coursework task."</p>'; return; }
