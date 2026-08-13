@@ -593,6 +593,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     return '✍️';
   }
   function preview(text){ var s=cleanSpeech(text).replace(/\s+/g,' ').trim(); return s.length>90 ? s.slice(0,90).trim()+'…' : s; }
+  function tsBold(text){ return esc(text).replace(/\[(\d{1,2}:\d{2})\]/g, '<b style="font-weight:800;color:#fff;background:var(--herb);padding:1px 7px;border-radius:6px;display:inline-block;margin:1px 2px;">[$1]</b>'); }
 
   function renderNotes(){
     var wrap=document.getElementById('notesList'); wrap.innerHTML='';
@@ -623,7 +624,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       card.appendChild(head);
 
       if(open){
-        var body=document.createElement('div'); body.className='readtext'; body.style.marginTop='12px'; body.textContent=n.text;
+        var body=document.createElement('div'); body.className='readtext'; body.style.marginTop='12px'; body.innerHTML=tsBold(n.text);
         card.appendChild(body);
         card.appendChild(makeReadBar(function(){ return displayTitle(n)+'. '+n.text; }));
         var actions=document.createElement('div'); actions.className='row'; actions.style.marginTop='10px';
@@ -813,7 +814,8 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     var res=document.getElementById('recResult'); res.innerHTML='';
     var card=document.createElement('div'); card.className='card';
     var h=document.createElement('div'); h.style.cssText='font-family:Saira Condensed,sans-serif;color:var(--herb);font-size:22px;margin:0 0 8px;'; h.textContent='Your recording, in words';
-    var body=document.createElement('div'); body.className='readtext'; body.textContent=text||'(No clear speech was found.)';
+    var body=document.createElement('div'); body.className='readtext';
+    if(text){ body.innerHTML=tsBold(text); } else { body.textContent='(No clear speech was found.)'; }
     card.appendChild(h); card.appendChild(body);
     if(text){
       card.appendChild(makeReadBar(function(){ return text; }));
@@ -1048,17 +1050,19 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
         } else if(still()){ usePhoto(); }
       });
     } else { usePhoto(); }
-    narrate(s.say||s.line||'', function(){ if(wl.playing && !wl.paused){ setTimeout(function(){ if(wl.playing&&!wl.paused){ wl.i++; showSlide(); } }, 700); } });
+    narrate(s.say||s.line||'', function(){ if(wl.playing && !wl.paused){ setTimeout(function(){ if(wl.playing&&!wl.paused){ wl.i++; showSlide(); } }, 350); } });
   }
   function narrate(text, done){
     stopSpeak();
     var chunks=splitSentences(text); var idx=0;
+    var wlRate=Math.min(1.18, settings.rate+0.14);   // a touch faster than reading speed
+    var wlGap=Math.max(50, gap()-110);                // shorter pause between sentences
     function next(){
       if(!wl.playing||wl.paused) return;
       if(idx>=chunks.length){ if(done) done(); return; }
-      var u=new SpeechSynthesisUtterance(chunks[idx]); if(voice)u.voice=voice; u.lang='en-GB'; u.rate=settings.rate;
-      u.onend=function(){ if(wl.playing&&!wl.paused){ idx++; setTimeout(next, gap()); } };
-      u.onerror=function(){ if(wl.playing&&!wl.paused){ idx++; setTimeout(next, gap()); } };
+      var u=new SpeechSynthesisUtterance(chunks[idx]); if(voice)u.voice=voice; u.lang='en-GB'; u.rate=wlRate;
+      u.onend=function(){ if(wl.playing&&!wl.paused){ idx++; setTimeout(next, wlGap); } };
+      u.onerror=function(){ if(wl.playing&&!wl.paused){ idx++; setTimeout(next, wlGap); } };
       try{ synth.cancel(); synth.speak(u); }catch(e){}
     }
     next();
