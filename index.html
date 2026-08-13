@@ -220,11 +220,11 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
         <button class="opt sel" data-val="understand">Explain &amp; plan the task</button>
         <button class="opt" data-val="check">Check my own work</button>
       </div>
-      <input type="file" id="cwInput" accept="image/*,application/pdf" style="display:none;">
+      <input type="file" id="cwInput" accept="image/*,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none;">
       <button class="btn amber block" id="cwBtn" style="margin-top:14px;">📄 Upload task or draft</button>
       <div id="cwPreview" style="margin-top:12px;"></div>
       <div id="cwProgress"></div>
-      <p class="hint">A clear photo works most reliably. PDFs are supported too.</p>
+      <p class="hint">Photo, PDF, or Word document (.docx) all work. A clear photo reads most reliably.</p>
     </div>
     <div id="cwResult"></div>
   </section>
@@ -1176,23 +1176,30 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   var cwMode='understand';
   document.getElementById('cwMode').addEventListener('click', function(e){ if(!e.target.classList.contains('opt'))return; var k=this.querySelectorAll('.opt'); for(var i=0;i<k.length;i++) k[i].classList.remove('sel'); e.target.classList.add('sel'); cwMode=e.target.getAttribute('data-val'); });
   var cwInput=document.getElementById('cwInput');
+  function loadMammoth(){ if(window.mammoth) return Promise.resolve(); return new Promise(function(res,rej){ var s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/mammoth@1/mammoth.browser.min.js'; s.onload=function(){res();}; s.onerror=function(){rej(new Error('Could not load the Word reader.'));}; document.head.appendChild(s); }); }
   document.getElementById('cwBtn').onclick=function(){ if(!getKey()){ needKey(); return; } cwInput.click(); };
   cwInput.onchange=function(){
     var file=cwInput.files[0]; if(!file) return;
     var prev=document.getElementById('cwPreview'); prev.innerHTML='';
+    var isDocx = /\.docx$/i.test(file.name||'') || file.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    var isPdf  = file.type==='application/pdf' || /\.pdf$/i.test(file.name||'');
     if((file.type||'').indexOf('image')===0){ var img=document.createElement('img'); img.style.cssText='max-width:100%;border-radius:12px;'; img.src=URL.createObjectURL(file); prev.appendChild(img); }
     else { prev.innerHTML='<div class="hint">📄 '+esc(file.name||'document')+'</div>'; }
     var prog=document.getElementById('cwProgress'); prog.innerHTML='<p class="hint">Reading your coursework…</p>';
     var sys='You are a kind tutor helping Marvelous, a 16-year-old with dyslexia doing WJEC Level 1/2 Hospitality and Catering coursework (the NEA). This coursework is graded and MUST be entirely her own work. She can be disqualified if anyone, including an AI, writes any of it for her. So you must NEVER write the coursework, answers, paragraphs or sentences for her to copy. Use short, simple, kind sentences. Do not use markdown, asterisks, hash signs or emojis.';
-    var task = cwMode==='check'
+    var task = (cwMode==='check')
       ? 'This is Marvelous\u2019s own draft work. Give kind, encouraging feedback. First say what she has done well. Then gently point out what could be clearer, or what looks missing compared with what the task needs. Then ask a few simple questions to help her improve it herself. Do NOT rewrite it or write any new sentences for her.'
       : 'Explain in plain simple words what this task is asking her to do. Break it into small steps she can follow, like a checklist. List the main things she needs to include. Give a few gentle questions to get her thinking. Do NOT write the answer for her.';
-    fileToB64(file).then(function(b64){
-      var block = (file.type==='application/pdf')
-        ? {type:'document', source:{type:'base64', media_type:'application/pdf', data:b64}}
-        : {type:'image', source:{type:'base64', media_type:mediaType(file), data:b64}};
-      return claude({ system:sys, max_tokens:1300, messages:[{role:'user', content:[block, {type:'text', text:task}]}] });
-    }).then(function(ans){
+    var call;
+    if(isDocx){
+      call = loadMammoth().then(function(){ return file.arrayBuffer(); }).then(function(ab){ return window.mammoth.extractRawText({arrayBuffer:ab}); })
+        .then(function(r){ var text=((r&&r.value)||'').trim(); if(!text){ throw new Error('The Word file looked empty.'); } return claude({ system:sys, max_tokens:1300, messages:[{role:'user', content: task+'\n\nHere is her document:\n\n'+text}] }); });
+    } else if(isPdf){
+      call = fileToB64(file).then(function(b64){ return claude({ system:sys, max_tokens:1300, messages:[{role:'user', content:[{type:'document', source:{type:'base64', media_type:'application/pdf', data:b64}}, {type:'text', text:task}]}] }); });
+    } else {
+      call = fileToB64(file).then(function(b64){ return claude({ system:sys, max_tokens:1300, messages:[{role:'user', content:[{type:'image', source:{type:'base64', media_type:mediaType(file), data:b64}}, {type:'text', text:task}]}] }); });
+    }
+    call.then(function(ans){
       prog.innerHTML='';
       var res=document.getElementById('cwResult'); res.innerHTML='';
       var card=document.createElement('div'); card.className='card';
