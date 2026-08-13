@@ -224,6 +224,17 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     </div>
 
     <div class="card">
+      <label class="k">Fast transcription key (Groq)</label>
+      <p class="hint">For turning long recordings into notes quickly (a 55-min lesson in ~1–2 min, with timestamps). Free key from <b>console.groq.com</b> → API Keys. Saved only on this device. Without it, short clips still use the on-device transcriber.</p>
+      <input type="password" id="groqKey" placeholder="gsk_…" autocomplete="off">
+      <div class="row" style="margin-top:10px;">
+        <button class="btn primary" id="saveGroq">Save Groq key</button>
+        <button class="btn ghost" id="clearGroq">Remove</button>
+      </div>
+      <div id="groqStatus" class="hint"></div>
+    </div>
+
+    <div class="card">
       <label class="k">Voice</label>
       <select id="voiceSelect"></select>
       <button class="btn amber small block" id="testVoice" style="margin-top:9px;">▶ Test this voice</button>
@@ -324,6 +335,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   /* ---------- API key ---------- */
   function getKey(){ return localStorage.getItem('sl_apikey')||''; }
   function getUnsplash(){ return localStorage.getItem('sl_unsplash')||''; }
+  function getGroq(){ return localStorage.getItem('sl_groq')||''; }
   function currentModel(){ return localStorage.getItem('sl_model')||'claude-haiku-4-5-20251001'; }
   function needKey(){ toast('Add your Anthropic key in Settings first.'); switchTab('settings'); }
 
@@ -391,7 +403,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   if(synth){ loadVoice(); if(typeof synth.onvoiceschanged!=='undefined') synth.onvoiceschanged=loadVoice; }
 
   function splitSentences(text){
-    var t=(text||'').replace(/\r/g,'');
+    var t=(text||'').replace(/\r/g,'').replace(/\[\d{1,2}:\d{2}\]/g,' ');
     t=t.replace(/([.!?:])\s+/g,'$1\u0001').replace(/\n+/g,'\u0001');
     var parts=t.split('\u0001');
     var out=[]; for(var i=0;i<parts.length;i++){ var s=parts[i].trim(); if(s) out.push(s); } return out;
@@ -592,41 +604,103 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     wrap.appendChild(d);
   }
   function isPhone(){ return /iPhone|Android.*Mobile|Windows Phone/i.test(navigator.userAgent) || Math.min(screen.width,screen.height) < 480; }
+  /* ---------- Groq fast transcription (chunked, timestamped) ---------- */
+  function fmtTime(sec){ sec=Math.max(0,Math.round(sec)); var m=Math.floor(sec/60), s=sec%60; return (m<10?'0':'')+m+':'+(s<10?'0':'')+s; }
+  function encodeWAV(samples, sampleRate){
+    var buffer=new ArrayBuffer(44+samples.length*2), view=new DataView(buffer);
+    function wStr(off,s){ for(var i=0;i<s.length;i++) view.setUint8(off+i, s.charCodeAt(i)); }
+    wStr(0,'RIFF'); view.setUint32(4,36+samples.length*2,true); wStr(8,'WAVE'); wStr(12,'fmt ');
+    view.setUint32(16,16,true); view.setUint16(20,1,true); view.setUint16(22,1,true);
+    view.setUint32(24,sampleRate,true); view.setUint32(28,sampleRate*2,true); view.setUint16(32,2,true); view.setUint16(34,16,true);
+    wStr(36,'data'); view.setUint32(40,samples.length*2,true);
+    var off=44; for(var i=0;i<samples.length;i++){ var v=Math.max(-1,Math.min(1,samples[i])); view.setInt16(off, v<0?v*0x8000:v*0x7FFF, true); off+=2; }
+    return new Blob([view],{type:'audio/wav'});
+  }
+  function groqChunk(wavBlob, attempt){
+    var key=getGroq(); attempt=attempt||0;
+    var fd=new FormData();
+    fd.append('file', wavBlob, 'audio.wav'); fd.append('model','whisper-large-v3-turbo');
+    fd.append('response_format','verbose_json'); fd.append('language','en');
+    return fetch('https://api.groq.com/openai/v1/audio/transcriptions', { method:'POST', headers:{ 'Authorization':'Bearer '+key }, body:fd })
+      .then(function(r){
+        if(r.status===429 && attempt<4){ return new Promise(function(res){ setTimeout(res, 2500*(attempt+1)); }).then(function(){ return groqChunk(wavBlob, attempt+1); }); }
+        if(!r.ok){ return r.text().then(function(t){ throw new Error('Groq '+r.status+': '+t.slice(0,140)); }); }
+        return r.json();
+      });
+  }
+  function transcribeGroq(blob, onProgress){
+    var CHUNK=300, sr=16000;
+    return blobToMono16k(blob).then(function(f32){
+      var total=Math.max(1, Math.ceil(f32.length/(CHUNK*sr))), segs=[], t0=Date.now();
+      function step(i){
+        if(i>=total) return segs;
+        if(onProgress) onProgress(i, total, (Date.now()-t0)/1000);
+        var s=i*CHUNK*sr, e=Math.min(f32.length,(i+1)*CHUNK*sr);
+        var wav=encodeWAV(f32.subarray(s,e), sr);
+        return groqChunk(wav).then(function(res){
+          var offs=i*CHUNK, list=(res.segments&&res.segments.length)?res.segments:[{start:0,text:res.text||''}];
+          for(var k=0;k<list.length;k++){ segs.push({start:(list[k].start||0)+offs, text:(list[k].text||'').trim()}); }
+          return step(i+1);
+        });
+      }
+      return Promise.resolve(step(0));
+    });
+  }
+  function buildTimed(segments){
+    var out='', lastMark=-999;
+    for(var i=0;i<segments.length;i++){ var seg=segments[i]; if(!seg.text) continue;
+      if(seg.start-lastMark>=20){ out+=(out?'\n\n':'')+'['+fmtTime(seg.start)+'] '; lastMark=seg.start; }
+      out+=seg.text+' '; }
+    return out.trim();
+  }
+  function recResultCard(text){
+    var res=document.getElementById('recResult'); res.innerHTML='';
+    var card=document.createElement('div'); card.className='card';
+    var h=document.createElement('div'); h.style.cssText='font-family:Saira Condensed,sans-serif;color:var(--herb);font-size:22px;margin:0 0 8px;'; h.textContent='Your recording, in words';
+    var body=document.createElement('div'); body.className='readtext'; body.textContent=text||'(No clear speech was found.)';
+    card.appendChild(h); card.appendChild(body);
+    if(text){
+      card.appendChild(makeReadBar(function(){ return text; }));
+      var save=document.createElement('button'); save.className='btn primary block'; save.style.marginTop='12px'; save.textContent='Save as a note';
+      save.onclick=function(){ addNote('From a recording', text); toast('Saved to My notes.'); switchTab('notes'); };
+      card.appendChild(save);
+    }
+    var del=document.createElement('button'); del.className='btn ghost block'; del.style.marginTop='8px'; del.textContent='🗑 Delete';
+    del.onclick=function(){ res.innerHTML=''; };
+    card.appendChild(del); res.appendChild(card);
+  }
+
   function transcribe(btn){
     if(!recBlob){ toast('Record something first.'); return; }
+    var prog=document.getElementById('whisperProgress');
+    // Preferred: Groq (fast, chunked, timestamped)
+    if(getGroq()){
+      btn.disabled=true;
+      prog.innerHTML='<p class="hint" id="wLbl">Preparing your audio…</p><div class="progress"><i id="wBar"></i></div>';
+      var bar=document.getElementById('wBar'), lbl=document.getElementById('wLbl');
+      transcribeGroq(recBlob, function(i,total,elapsed){
+        var pct=Math.round(i/total*100); bar.style.width=pct+'%';
+        var per=i>0?elapsed/i:0, eta=per>0?Math.round(per*(total-i)):0;
+        lbl.textContent='Transcribing… part '+(i+1)+' of '+total+' · '+Math.round(elapsed)+'s so far'+(eta?(' · about '+eta+'s left'):'');
+      }).then(function(segments){
+        prog.innerHTML=''; recResultCard(buildTimed(segments)); btn.disabled=false;
+      }).catch(function(e){ prog.innerHTML=''; toast(e.message||'Groq transcription failed. Check the key in Settings.'); btn.disabled=false; });
+      return;
+    }
+    // Fallback: on-device Whisper (short clips only)
     if(isPhone()){
-      var ok = window.confirm('Turning a recording into words is heavy for a phone and might crash it. It works best on the iPad or laptop.\n\nOn a phone, the easy way is: open Notes, tap the keyboard microphone, and talk.\n\nTry anyway?');
+      var ok = window.confirm('Without the fast Groq key, this runs on the device and is heavy for a phone. It works best on the laptop. Try anyway?');
       if(!ok) return;
     }
     btn.disabled=true;
-    var prog=document.getElementById('whisperProgress');
     prog.innerHTML='<p class="hint" id="wLbl">Getting the transcriber ready…</p><div class="progress"><i id="wBar"></i></div>';
-    var bar=document.getElementById('wBar'), lbl=document.getElementById('wLbl');
+    var bar2=document.getElementById('wBar'), lbl2=document.getElementById('wLbl');
     window.SL_loadWhisper(function(p){
-      if(p&&p.status==='progress'&&p.total){ var pct=Math.round(p.loaded/p.total*100); bar.style.width=pct+'%'; lbl.textContent='Downloading language model… '+pct+'%'; }
-      else if(p&&p.status==='ready'){ lbl.textContent='Listening to your recording…'; bar.style.width='100%'; }
-    }).then(function(){
-      lbl.textContent='Listening to your recording…'; bar.style.width='100%';
-      return blobToMono16k(recBlob);
-    }).then(function(f32){
-      return window.SL_transcribe(f32);
-    }).then(function(text){
-      prog.innerHTML='';
-      var res=document.getElementById('recResult'); res.innerHTML='';
-      var card=document.createElement('div'); card.className='card';
-      var h=document.createElement('div'); h.style.cssText='font-family:Saira Condensed,sans-serif;color:var(--herb);font-size:22px;margin:0 0 8px;'; h.textContent='Your recording, in words';
-      var body=document.createElement('div'); body.className='readtext'; body.textContent=text||'(No clear speech was found.)';
-      card.appendChild(h); card.appendChild(body);
-      if(text){ card.appendChild(makeReadBar(function(){ return text; }));
-        var save=document.createElement('button'); save.className='btn primary block'; save.style.marginTop='12px'; save.textContent='Save as a note';
-        save.onclick=function(){ addNote('From a recording', text); toast('Saved to My notes.'); switchTab('notes'); };
-        card.appendChild(save);
-      }
-      res.appendChild(card); btn.disabled=false;
-    }).catch(function(e){
-      prog.innerHTML=''; btn.disabled=false;
-      toast('Could not transcribe here. Try on the laptop for long clips.');
-    });
+      if(p&&p.status==='progress'&&p.total){ bar2.style.width=Math.round(p.loaded/p.total*100)+'%'; lbl2.textContent='Downloading language model… '+Math.round(p.loaded/p.total*100)+'%'; }
+    }).then(function(){ lbl2.textContent='Listening to your recording… (this can be slow for long clips)'; bar2.style.width='100%'; return blobToMono16k(recBlob); })
+      .then(function(f32){ return window.SL_transcribe(f32); })
+      .then(function(text){ prog.innerHTML=''; recResultCard(text); btn.disabled=false; })
+      .catch(function(e){ prog.innerHTML=''; btn.disabled=false; toast('On-device transcription struggled. Add the Groq key in Settings for long recordings.'); });
   }
   function blobToMono16k(blob){
     return blob.arrayBuffer().then(function(buf){
@@ -678,8 +752,13 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       askRec.ondataavailable=function(e){ if(e.data&&e.data.size) askChunks.push(e.data); };
       askRec.onstop=function(){
         var blob=new Blob(askChunks,{type:(askRec.mimeType||'audio/webm')}); stream.getTracks().forEach(function(t){t.stop();});
-        if(isPhone()){ st.textContent='On a phone, use the keyboard microphone in the box instead.'; return; }
         st.textContent='Turning your words into text…';
+        if(getGroq()){
+          transcribeGroq(blob).then(function(segs){ var text=segs.map(function(s){return s.text;}).join(' ').trim(); var ta=document.getElementById('askInput'); ta.value=(ta.value?ta.value+' ':'')+text; st.textContent='Added. Check it, then tap Ask.'; })
+            .catch(function(){ st.textContent='Could not transcribe. Try typing, or the keyboard mic.'; });
+          return;
+        }
+        if(isPhone()){ st.textContent='On a phone, use the keyboard microphone in the box instead.'; return; }
         window.SL_loadWhisper(function(p){ if(p&&p.status==='progress'&&p.total){ st.textContent='Getting ready… '+Math.round(p.loaded/p.total*100)+'%'; } })
           .then(function(){ return blobToMono16k(blob); })
           .then(function(f32){ return window.SL_transcribe(f32); })
@@ -875,6 +954,13 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   uStatus();
   document.getElementById('saveUnsplash').onclick=function(){ var k=document.getElementById('unsplashKey').value.trim(); if(!k){ toast('Paste the Access Key first.'); return; } localStorage.setItem('sl_unsplash', k); photoCache={}; uStatus(); toast('Photo key saved.'); };
   document.getElementById('clearUnsplash').onclick=function(){ localStorage.removeItem('sl_unsplash'); document.getElementById('unsplashKey').value=''; uStatus(); toast('Photo key removed.'); };
+
+  // groq key
+  document.getElementById('groqKey').value = getGroq();
+  function gStatus(){ document.getElementById('groqStatus').textContent = getGroq() ? 'Fast transcription ready. ✓ Long recordings will use Groq.' : 'No Groq key — long recordings fall back to the slow on-device transcriber.'; }
+  gStatus();
+  document.getElementById('saveGroq').onclick=function(){ var k=document.getElementById('groqKey').value.trim(); if(!k){ toast('Paste the Groq key first.'); return; } localStorage.setItem('sl_groq', k); gStatus(); toast('Groq key saved.'); };
+  document.getElementById('clearGroq').onclick=function(){ localStorage.removeItem('sl_groq'); document.getElementById('groqKey').value=''; gStatus(); toast('Groq key removed.'); };
 
   document.getElementById('rate').addEventListener('input', function(){ settings.rate=parseFloat(this.value); save('sl_settings',settings); applySettings(); });
   document.getElementById('sizeOpts').addEventListener('click', function(e){ if(!e.target.classList.contains('opt'))return; settings.size=e.target.getAttribute('data-val'); save('sl_settings',settings); applySettings(); });
