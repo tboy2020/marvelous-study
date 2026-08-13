@@ -122,6 +122,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     <button class="tab" data-tab="snap">Snap a Page</button>
     <button class="tab" data-tab="record">Record</button>
     <button class="tab" data-tab="ask">Ask for Help</button>
+    <button class="tab" data-tab="videos">Videos</button>
     <button class="tab" data-tab="settings">Settings</button>
   </div>
 </nav>
@@ -195,6 +196,23 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       </div>
       <div id="askRecStatus" class="hint"></div>
     </div>
+  </section>
+
+  <!-- VIDEOS -->
+  <section class="panel" id="p-videos">
+    <p class="eyebrow">Watch and learn</p>
+    <h2 class="title">Video lessons</h2>
+    <p class="lead">Her custom cartoons and any helpful videos, kept by topic. Upload a Vyond video to YouTube as <b>Unlisted</b>, then paste the link here.</p>
+    <div class="card">
+      <label class="k" for="vidTitle">Title</label>
+      <input type="text" id="vidTitle" placeholder="e.g. The 4 Cs of Food Safety">
+      <label class="k" for="vidTopic">Topic (optional)</label>
+      <input type="text" id="vidTopic" placeholder="e.g. Food Safety">
+      <label class="k" for="vidUrl">YouTube link</label>
+      <input type="text" id="vidUrl" placeholder="https://youtu.be/…">
+      <button class="btn primary block" id="addVideo" style="margin-top:12px;">Add video</button>
+    </div>
+    <div id="videosList"></div>
   </section>
 
   <!-- SETTINGS -->
@@ -991,6 +1009,64 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   document.getElementById('wlNext').onclick=function(){ if(!wl.playing) return; stopSpeak(); wl.paused=false; wlSetPlay(); wl.i++; showSlide(); };
   document.getElementById('wlBack').onclick=function(){ if(!wl.playing) return; stopSpeak(); wl.paused=false; wlSetPlay(); wl.i=Math.max(0,wl.i-1); showSlide(); };
 
+  /* ---------- VIDEO LESSONS ---------- */
+  var videos = load('sl_videos', []);
+  function saveVideos(){ save('sl_videos', videos); }
+  function ytId(url){ var m=(url||'').match(/(?:youtu\.be\/|[?&]v=|embed\/|shorts\/)([A-Za-z0-9_-]{11})/); if(m) return m[1]; var m2=(url||'').match(/^([A-Za-z0-9_-]{11})$/); return m2?m2[1]:''; }
+  document.getElementById('addVideo').onclick=function(){
+    var url=document.getElementById('vidUrl').value.trim();
+    var id=ytId(url);
+    if(!id){ toast('Paste a valid YouTube link.'); return; }
+    var title=document.getElementById('vidTitle').value.trim()||'Video';
+    var topic=document.getElementById('vidTopic').value.trim()||'General';
+    videos.unshift({ id:'v'+Date.now(), title:title, topic:topic, videoId:id, ts:Date.now() });
+    saveVideos(); renderVideos();
+    document.getElementById('vidTitle').value=''; document.getElementById('vidTopic').value=''; document.getElementById('vidUrl').value='';
+    toast('Video added.');
+  };
+  function renderVideos(){
+    var wrap=document.getElementById('videosList'); wrap.innerHTML='';
+    if(!videos.length){ wrap.innerHTML='<p class="empty">No videos yet. Add one above — a Vyond cartoon uploaded to YouTube as Unlisted, or any helpful video.</p>'; return; }
+    var byTopic={}, order=[];
+    for(var i=0;i<videos.length;i++){ var t=videos[i].topic||'General'; if(!byTopic[t]){ byTopic[t]=[]; order.push(t); } byTopic[t].push(videos[i]); }
+    for(var o=0;o<order.length;o++){
+      var hd=document.createElement('div'); hd.style.cssText='font-family:Saira Condensed,sans-serif;text-transform:uppercase;letter-spacing:1px;font-size:15px;color:var(--herb);font-weight:700;margin:18px 0 8px;'; hd.textContent=order[o]; wrap.appendChild(hd);
+      var vs=byTopic[order[o]];
+      for(var j=0;j<vs.length;j++){ (function(v){
+        var card=document.createElement('div'); card.className='card';
+        renderVideoCollapsed(card, v);
+        wrap.appendChild(card);
+      })(vs[j]); }
+    }
+  }
+  function renderVideoCollapsed(card, v){
+    card.innerHTML='';
+    var row=document.createElement('div'); row.style.cssText='display:flex;gap:12px;align-items:center;cursor:pointer;';
+    var thumb=document.createElement('img'); thumb.src='https://img.youtube.com/vi/'+v.videoId+'/hqdefault.jpg'; thumb.alt=''; thumb.style.cssText='width:120px;height:68px;object-fit:cover;border-radius:10px;flex:0 0 auto;background:#ddd;';
+    var mid=document.createElement('div'); mid.style.cssText='flex:1;min-width:0;';
+    var h=document.createElement('div'); h.style.cssText='font-family:Saira Condensed,sans-serif;font-size:20px;color:var(--herb);line-height:1.15;'; h.textContent=v.title;
+    var play=document.createElement('div'); play.style.cssText='font-size:13.5px;color:var(--ink-soft);margin-top:3px;'; play.textContent='▶ Tap to play';
+    mid.appendChild(h); mid.appendChild(play);
+    row.appendChild(thumb); row.appendChild(mid);
+    row.onclick=function(){ playVideo(card, v); };
+    card.appendChild(row);
+    var actions=document.createElement('div'); actions.className='row'; actions.style.marginTop='10px';
+    var del=document.createElement('button'); del.className='btn ghost small'; del.textContent='🗑 Delete';
+    del.onclick=function(){ if(!window.confirm('Remove this video?')) return; videos=videos.filter(function(x){return x.id!==v.id;}); saveVideos(); renderVideos(); };
+    actions.appendChild(del); card.appendChild(actions);
+  }
+  function playVideo(card, v){
+    card.innerHTML='';
+    var box=document.createElement('div'); box.style.cssText='position:relative;width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#000;';
+    var ifr=document.createElement('iframe'); ifr.src='https://www.youtube.com/embed/'+v.videoId+'?autoplay=1&rel=0&modestbranding=1';
+    ifr.style.cssText='position:absolute;inset:0;width:100%;height:100%;border:0;'; ifr.setAttribute('allow','autoplay; encrypted-media; fullscreen'); ifr.setAttribute('allowfullscreen','');
+    box.appendChild(ifr); card.appendChild(box);
+    var h=document.createElement('div'); h.style.cssText='font-family:Saira Condensed,sans-serif;font-size:20px;color:var(--herb);margin-top:10px;'; h.textContent=v.title; card.appendChild(h);
+    var close=document.createElement('button'); close.className='btn ghost small'; close.style.marginTop='8px'; close.textContent='‹ Close';
+    close.onclick=function(){ renderVideoCollapsed(card, v); };
+    card.appendChild(close);
+  }
+
   /* ---------- tabs ---------- */
   function switchTab(name){
     stopSpeak();
@@ -1039,7 +1115,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
 
   document.addEventListener('visibilitychange', function(){ if(document.hidden) stopSpeak(); });
 
-  applySettings(); renderNotes(); renderChat();
+  applySettings(); renderNotes(); renderChat(); renderVideos();
 })();
 </script>
 <script>
