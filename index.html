@@ -111,6 +111,16 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
 </style>
 </head>
 <body>
+<div id="lock" style="position:fixed;inset:0;z-index:200;background:var(--herb);color:#F7F3E8;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;">
+  <div style="font-family:'Saira Condensed',sans-serif;font-weight:700;font-size:40px;letter-spacing:.5px;text-transform:uppercase;">Study Lab</div>
+  <div style="opacity:.85;margin-top:4px;font-size:15px;">Marvelous's smart study helper</div>
+  <div id="lockMsg" style="margin-top:26px;font-size:16px;opacity:.9;">Enter your code</div>
+  <input id="lockPin" type="password" inputmode="numeric" autocomplete="off" maxlength="12"
+    style="margin-top:14px;width:210px;text-align:center;font-size:30px;letter-spacing:10px;padding:12px;border:none;border-radius:14px;background:#F7F3E8;color:#26201f;">
+  <button id="lockGo" style="margin-top:16px;background:var(--amber);color:#3a2c0e;border:none;border-radius:12px;font-family:'Saira Condensed',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.6px;font-size:18px;padding:13px 40px;cursor:pointer;">Open</button>
+  <div id="lockSet" style="margin-top:22px;font-size:13px;opacity:.75;text-align:center;max-width:280px;line-height:1.5;"></div>
+</div>
+
 <header>
   <div class="head-row">
     <div class="brand"><b>Study Lab</b><span>Marvelous's smart study helper</span></div>
@@ -346,6 +356,36 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   };
 </script>
 
+<script>
+/* ---- PIN lock (set on first use, then required each open) ---- */
+(function(){
+  function gp(){ try{ return localStorage.getItem('sl_pin')||''; }catch(e){ return ''; } }
+  var lock=document.getElementById('lock'), pin=document.getElementById('lockPin'),
+      go=document.getElementById('lockGo'), msg=document.getElementById('lockMsg'), setNote=document.getElementById('lockSet');
+  var existing=gp();
+  var settingNew = !existing;
+  var firstEntry=null;
+  if(settingNew){ msg.textContent='Create a code for this app'; setNote.textContent='Pick a code (e.g. 4 digits). You will type it each time you open Study Lab. Write it somewhere safe — it cannot be recovered.'; }
+  function unlock(){ lock.style.display='none'; document.body.style.overflow=''; }
+  function shake(t){ msg.textContent=t; pin.value=''; pin.focus(); }
+  function submit(){
+    var v=(pin.value||'').trim();
+    if(v.length<4){ shake('Use at least 4 numbers'); return; }
+    if(settingNew){
+      if(firstEntry===null){ firstEntry=v; pin.value=''; msg.textContent='Type it once more to confirm'; setNote.textContent=''; return; }
+      if(v!==firstEntry){ firstEntry=null; msg.textContent='Create a code for this app'; shake('They did not match. Try again'); return; }
+      try{ localStorage.setItem('sl_pin', v); }catch(e){}
+      unlock();
+      return;
+    }
+    if(v===existing){ unlock(); } else { shake('Wrong code. Try again'); }
+  }
+  go.onclick=submit;
+  pin.addEventListener('keydown', function(e){ if(e.key==='Enter') submit(); });
+  document.body.style.overflow='hidden';
+  setTimeout(function(){ pin.focus(); }, 200);
+})();
+</script>
 <script>
 (function(){
   "use strict";
