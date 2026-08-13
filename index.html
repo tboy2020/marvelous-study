@@ -142,6 +142,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
         <button class="btn ghost" id="clearNote">Clear</button>
       </div>
     </div>
+    <input type="text" id="noteSearch" placeholder="🔎 Search your notes…" style="margin-bottom:14px;">
     <div id="notesList"></div>
   </section>
 
@@ -477,47 +478,87 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   /* ---------- NOTES ---------- */
   var notes = load('sl_notes', []);
   function saveNotes(){ save('sl_notes', notes); }
-  var editingId=null;
+  var editingId=null, expanded={};
   function dayKey(ts){ var d=new Date(ts); return d.toLocaleDateString(undefined,{weekday:'long',year:'numeric',month:'long',day:'numeric'}); }
+  function deriveTitle(text){
+    if(!text) return '';
+    var lines=text.split('\n');
+    for(var i=0;i<lines.length;i++){
+      var l=lines[i].replace(/^\s*#{1,6}\s*/,'').replace(/[*_`~>]/g,'').replace(/^\s*[-•]\s*/,'').trim();
+      if(l.length>=3){ return l.length>52 ? l.slice(0,52).trim()+'…' : l; }
+    }
+    return '';
+  }
+  function displayTitle(n){
+    var t=(n.title||'').trim();
+    if(t && t!=='From a photo' && t!=='From a recording'){ return t; }
+    return deriveTitle(n.text) || t || 'Note';
+  }
+  function noteIcon(n){
+    var t=(n.title||'');
+    if(t.indexOf('photo')>=0) return '📷';
+    if(t.indexOf('recording')>=0) return '🎙';
+    return '✍️';
+  }
+  function preview(text){ var s=cleanSpeech(text).replace(/\s+/g,' ').trim(); return s.length>90 ? s.slice(0,90).trim()+'…' : s; }
+
   function renderNotes(){
     var wrap=document.getElementById('notesList'); wrap.innerHTML='';
-    readBars=[]; // rebuild bars
+    readBars=[];
+    var q=(document.getElementById('noteSearch').value||'').trim().toLowerCase();
+    var list=notes;
+    if(q){ list=notes.filter(function(n){ return (displayTitle(n)+' '+(n.text||'')).toLowerCase().indexOf(q)>=0; }); }
     if(!notes.length){ wrap.innerHTML='<p class="empty">No notes yet. Write one above, or use Snap a Page or Record to make one.</p>'; return; }
+    if(!list.length){ wrap.innerHTML='<p class="empty">No notes match "'+q+'".</p>'; return; }
     var lastDay=null;
-    for(var i=0;i<notes.length;i++){ (function(n){
-      var dk=dayKey(n.ts);
-      if(dk!==lastDay){ lastDay=dk; var hd=document.createElement('div'); hd.style.cssText='font-family:Saira Condensed,sans-serif;text-transform:uppercase;letter-spacing:1px;font-size:15px;color:var(--herb);font-weight:700;margin:18px 0 8px;'; hd.textContent=dk; wrap.appendChild(hd); }
+    for(var i=0;i<list.length;i++){ (function(n){
+      if(!q){ var dk=dayKey(n.ts); if(dk!==lastDay){ lastDay=dk; var hd=document.createElement('div'); hd.style.cssText='font-family:Saira Condensed,sans-serif;text-transform:uppercase;letter-spacing:1px;font-size:15px;color:var(--herb);font-weight:700;margin:18px 0 8px;'; hd.textContent=dk; wrap.appendChild(hd); } }
       if(n.id===editingId){ wrap.appendChild(editCard(n)); return; }
+      var open = !!expanded[n.id];
       var card=document.createElement('div'); card.className='card note-item';
-      var h=document.createElement('h3'); h.textContent=n.title||'Untitled note';
+
+      // collapsible header
+      var head=document.createElement('div'); head.style.cssText='display:flex;align-items:flex-start;gap:10px;cursor:pointer;';
+      var ic=document.createElement('div'); ic.textContent=noteIcon(n); ic.style.cssText='font-size:22px;line-height:1.2;flex:0 0 auto;';
+      var mid=document.createElement('div'); mid.style.cssText='flex:1;min-width:0;';
+      var h=document.createElement('h3'); h.textContent=displayTitle(n); h.style.margin='0';
       var meta=document.createElement('div'); meta.className='meta'; meta.textContent=new Date(n.ts).toLocaleString();
-      var body=document.createElement('div'); body.className='readtext'; body.textContent=n.text;
-      card.appendChild(h); card.appendChild(meta); card.appendChild(body);
-      card.appendChild(makeReadBar(function(){ return (n.title?n.title+'. ':'')+n.text; }));
-      var actions=document.createElement('div'); actions.className='row'; actions.style.marginTop='10px';
-      var watch=document.createElement('button'); watch.className='btn amber small'; watch.textContent='🎬 Watch & Learn';
-      var sum=document.createElement('button'); sum.className='btn primary small'; sum.textContent='✨ Summarise';
-      var edit=document.createElement('button'); edit.className='btn ghost small'; edit.textContent='✏️ Edit';
-      var del=document.createElement('button'); del.className='btn ghost small'; del.textContent='🗑 Delete';
-      actions.appendChild(watch); actions.appendChild(sum); actions.appendChild(edit); actions.appendChild(del); card.appendChild(actions);
-      if(n.summary){ card.appendChild(summaryBox(n)); }
-      watch.onclick=function(){ startWatchLearn(n); };
-      edit.onclick=function(){ stopSpeak(); editingId=n.id; renderNotes(); };
-      sum.onclick=function(){
-        if(!getKey()){ needKey(); return; }
-        sum.disabled=true; sum.textContent='Working…';
-        claude({ system:'You are helping a 16-year-old student with dyslexia. Summarise the notes into short, simple points using plain words and short sentences. Keep it accurate. Do not use markdown, asterisks, hash signs, or emojis. Start a new line for each point. You may use a short plain heading followed by a colon.', messages:[{role:'user',content:'Summarise these notes:\n\n'+n.text}], max_tokens:700 })
-        .then(function(txt){ n.summary=txt; saveNotes(); renderNotes(); })
-        .catch(function(e){ toast(e.message||'Could not summarise.'); sum.disabled=false; sum.textContent='✨ Summarise'; });
-      };
-      del.onclick=function(){ notes=notes.filter(function(x){return x.id!==n.id;}); saveNotes(); renderNotes(); };
+      mid.appendChild(h); mid.appendChild(meta);
+      if(!open){ var pv=document.createElement('div'); pv.className='readtext'; pv.style.cssText='font-size:15px;color:var(--ink-soft);margin-top:4px;white-space:normal;'; pv.textContent=preview(n.text); mid.appendChild(pv); }
+      var chev=document.createElement('div'); chev.textContent=open?'▲':'▼'; chev.style.cssText='color:var(--ink-soft);flex:0 0 auto;font-size:13px;margin-top:4px;';
+      head.appendChild(ic); head.appendChild(mid); head.appendChild(chev);
+      head.onclick=function(){ if(open){ delete expanded[n.id]; } else { expanded[n.id]=true; } renderNotes(); };
+      card.appendChild(head);
+
+      if(open){
+        var body=document.createElement('div'); body.className='readtext'; body.style.marginTop='12px'; body.textContent=n.text;
+        card.appendChild(body);
+        card.appendChild(makeReadBar(function(){ return displayTitle(n)+'. '+n.text; }));
+        var actions=document.createElement('div'); actions.className='row'; actions.style.marginTop='10px';
+        var watch=document.createElement('button'); watch.className='btn amber small'; watch.textContent='🎬 Watch & Learn';
+        var sum=document.createElement('button'); sum.className='btn primary small'; sum.textContent='✨ Summarise';
+        var edit=document.createElement('button'); edit.className='btn ghost small'; edit.textContent='✏️ Edit';
+        var del=document.createElement('button'); del.className='btn ghost small'; del.textContent='🗑 Delete';
+        actions.appendChild(watch); actions.appendChild(sum); actions.appendChild(edit); actions.appendChild(del); card.appendChild(actions);
+        if(n.summary){ card.appendChild(summaryBox(n)); }
+        watch.onclick=function(){ startWatchLearn(n); };
+        edit.onclick=function(){ stopSpeak(); editingId=n.id; renderNotes(); };
+        sum.onclick=function(){
+          if(!getKey()){ needKey(); return; }
+          sum.disabled=true; sum.textContent='Working…';
+          claude({ system:'You are helping a 16-year-old student with dyslexia. Summarise the notes into short, simple points using plain words and short sentences. Keep it accurate. Do not use markdown, asterisks, hash signs, or emojis. Start a new line for each point. You may use a short plain heading followed by a colon.', messages:[{role:'user',content:'Summarise these notes:\n\n'+n.text}], max_tokens:700 })
+          .then(function(txt){ n.summary=txt; saveNotes(); renderNotes(); })
+          .catch(function(e){ toast(e.message||'Could not summarise.'); sum.disabled=false; sum.textContent='✨ Summarise'; });
+        };
+        del.onclick=function(){ if(!window.confirm('Delete this note?')) return; notes=notes.filter(function(x){return x.id!==n.id;}); delete expanded[n.id]; saveNotes(); renderNotes(); };
+      }
       wrap.appendChild(card);
-    })(notes[i]); }
+    })(list[i]); }
   }
   function editCard(n){
     var card=document.createElement('div'); card.className='card note-item';
     var l1=document.createElement('label'); l1.className='k'; l1.textContent='Title'; l1.style.marginTop='0';
-    var ti=document.createElement('input'); ti.type='text'; ti.value=n.title||''; ti.placeholder='Title';
+    var ti=document.createElement('input'); ti.type='text'; ti.value=displayTitle(n); ti.placeholder='Title';
     var l2=document.createElement('label'); l2.className='k'; l2.textContent='Note';
     var ta=document.createElement('textarea'); ta.value=n.text||'';
     var hint=document.createElement('p'); hint.className='hint'; hint.innerHTML='Tip: tap the <b>keyboard microphone</b> to add more by talking.';
@@ -547,9 +588,12 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     return box;
   }
   function addNote(title, text){
-    notes.unshift({ id:'n'+Date.now(), title:title||'', text:text||'', summary:'', ts:Date.now() });
+    var t=(title||'').trim();
+    if(!t || t==='From a photo' || t==='From a recording'){ var d=deriveTitle(text); if(d) t=d; else if(!t) t='Note'; }
+    notes.unshift({ id:'n'+Date.now(), title:t, text:text||'', summary:'', ts:Date.now() });
     saveNotes(); renderNotes();
   }
+  (function(){ var s=document.getElementById('noteSearch'); if(s) s.addEventListener('input', function(){ renderNotes(); }); })();
   document.getElementById('saveNote').onclick=function(){
     var t=document.getElementById('noteText').value.trim();
     if(!t){ toast('Write something first.'); return; }
