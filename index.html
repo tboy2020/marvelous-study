@@ -132,6 +132,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     <button class="tab" data-tab="snap">Snap a Page</button>
     <button class="tab" data-tab="record">Record</button>
     <button class="tab" data-tab="ask">Ask for Help</button>
+    <button class="tab" data-tab="coursework">Coursework</button>
     <button class="tab" data-tab="videos">Videos</button>
     <button class="tab" data-tab="settings">Settings</button>
   </div>
@@ -206,6 +207,26 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       </div>
       <div id="askRecStatus" class="hint"></div>
     </div>
+  </section>
+
+  <!-- COURSEWORK -->
+  <section class="panel" id="p-coursework">
+    <p class="eyebrow">Your NEA / coursework</p>
+    <h2 class="title">Coursework helper</h2>
+    <p class="lead">Upload your task, or your own draft (a photo or a PDF). I explain what it means, help you plan it, and check your work — but I will <b>never write it for you</b>. Your coursework has to be your own, or it does not count.</p>
+    <div class="card">
+      <label class="k">What do you need?</label>
+      <div class="opts" id="cwMode">
+        <button class="opt sel" data-val="understand">Explain &amp; plan the task</button>
+        <button class="opt" data-val="check">Check my own work</button>
+      </div>
+      <input type="file" id="cwInput" accept="image/*,application/pdf" style="display:none;">
+      <button class="btn amber block" id="cwBtn" style="margin-top:14px;">📄 Upload task or draft</button>
+      <div id="cwPreview" style="margin-top:12px;"></div>
+      <div id="cwProgress"></div>
+      <p class="hint">A clear photo works most reliably. PDFs are supported too.</p>
+    </div>
+    <div id="cwResult"></div>
   </section>
 
   <!-- VIDEOS -->
@@ -1150,6 +1171,44 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     close.onclick=function(){ renderVideoCollapsed(card, v); };
     card.appendChild(close);
   }
+
+  /* ---------- COURSEWORK helper (understand / check own work — never writes it) ---------- */
+  var cwMode='understand';
+  document.getElementById('cwMode').addEventListener('click', function(e){ if(!e.target.classList.contains('opt'))return; var k=this.querySelectorAll('.opt'); for(var i=0;i<k.length;i++) k[i].classList.remove('sel'); e.target.classList.add('sel'); cwMode=e.target.getAttribute('data-val'); });
+  var cwInput=document.getElementById('cwInput');
+  document.getElementById('cwBtn').onclick=function(){ if(!getKey()){ needKey(); return; } cwInput.click(); };
+  cwInput.onchange=function(){
+    var file=cwInput.files[0]; if(!file) return;
+    var prev=document.getElementById('cwPreview'); prev.innerHTML='';
+    if((file.type||'').indexOf('image')===0){ var img=document.createElement('img'); img.style.cssText='max-width:100%;border-radius:12px;'; img.src=URL.createObjectURL(file); prev.appendChild(img); }
+    else { prev.innerHTML='<div class="hint">📄 '+esc(file.name||'document')+'</div>'; }
+    var prog=document.getElementById('cwProgress'); prog.innerHTML='<p class="hint">Reading your coursework…</p>';
+    var sys='You are a kind tutor helping Marvelous, a 16-year-old with dyslexia doing WJEC Level 1/2 Hospitality and Catering coursework (the NEA). This coursework is graded and MUST be entirely her own work. She can be disqualified if anyone, including an AI, writes any of it for her. So you must NEVER write the coursework, answers, paragraphs or sentences for her to copy. Use short, simple, kind sentences. Do not use markdown, asterisks, hash signs or emojis.';
+    var task = cwMode==='check'
+      ? 'This is Marvelous\u2019s own draft work. Give kind, encouraging feedback. First say what she has done well. Then gently point out what could be clearer, or what looks missing compared with what the task needs. Then ask a few simple questions to help her improve it herself. Do NOT rewrite it or write any new sentences for her.'
+      : 'Explain in plain simple words what this task is asking her to do. Break it into small steps she can follow, like a checklist. List the main things she needs to include. Give a few gentle questions to get her thinking. Do NOT write the answer for her.';
+    fileToB64(file).then(function(b64){
+      var block = (file.type==='application/pdf')
+        ? {type:'document', source:{type:'base64', media_type:'application/pdf', data:b64}}
+        : {type:'image', source:{type:'base64', media_type:mediaType(file), data:b64}};
+      return claude({ system:sys, max_tokens:1300, messages:[{role:'user', content:[block, {type:'text', text:task}]}] });
+    }).then(function(ans){
+      prog.innerHTML='';
+      var res=document.getElementById('cwResult'); res.innerHTML='';
+      var card=document.createElement('div'); card.className='card';
+      var h=document.createElement('div'); h.style.cssText='font-family:Saira Condensed,sans-serif;color:var(--herb);font-size:22px;margin:0 0 8px;'; h.textContent = (cwMode==='check')?'Feedback on your work':'How to do this task';
+      var body=document.createElement('div'); body.className='readtext'; body.textContent=ans;
+      card.appendChild(h); card.appendChild(body);
+      card.appendChild(makeReadBar(function(){ return ans; }));
+      var save=document.createElement('button'); save.className='btn primary block'; save.style.marginTop='12px'; save.textContent='Save as a note';
+      save.onclick=function(){ addNote((cwMode==='check')?'Coursework feedback':'Coursework plan', ans); toast('Saved to My notes.'); switchTab('notes'); };
+      card.appendChild(save);
+      var del=document.createElement('button'); del.className='btn ghost block'; del.style.marginTop='8px'; del.textContent='🗑 Delete';
+      del.onclick=function(){ res.innerHTML=''; prev.innerHTML=''; };
+      card.appendChild(del);
+      res.appendChild(card);
+    }).catch(function(e){ prog.innerHTML=''; toast(e.message||'Could not read the coursework. Try a clear photo.'); });
+  };
 
   /* ---------- tabs ---------- */
   function switchTab(name){
