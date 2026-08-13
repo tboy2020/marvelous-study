@@ -250,6 +250,17 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     </div>
 
     <div class="card">
+      <label class="k">Video key (real moving clips in Watch &amp; Learn)</label>
+      <p class="hint">Makes lessons play real footage that moves, not still photos. Free key from <b>pexels.com/api</b> → Get Started. Saved only on this device. Without it, lessons use photos, then icons.</p>
+      <input type="password" id="pexelsKey" placeholder="Pexels API key…" autocomplete="off">
+      <div class="row" style="margin-top:10px;">
+        <button class="btn primary" id="savePexels">Save video key</button>
+        <button class="btn ghost" id="clearPexels">Remove</button>
+      </div>
+      <div id="pexelsStatus" class="hint"></div>
+    </div>
+
+    <div class="card">
       <label class="k">Fast transcription key (Groq)</label>
       <p class="hint">For turning long recordings into notes quickly (a 55-min lesson in ~1–2 min, with timestamps). Free key from <b>console.groq.com</b> → API Keys. Saved only on this device. Without it, short clips still use the on-device transcriber.</p>
       <input type="password" id="groqKey" placeholder="gsk_…" autocomplete="off">
@@ -362,6 +373,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   function getKey(){ return localStorage.getItem('sl_apikey')||''; }
   function getUnsplash(){ return localStorage.getItem('sl_unsplash')||''; }
   function getGroq(){ return localStorage.getItem('sl_groq')||''; }
+  function getPexels(){ return localStorage.getItem('sl_pexels')||''; }
   function currentModel(){ return localStorage.getItem('sl_model')||'claude-haiku-4-5-20251001'; }
   function needKey(){ toast('Add your Anthropic key in Settings first.'); switchTab('settings'); }
 
@@ -877,7 +889,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   };
 
   /* ---------- photos (Unsplash) ---------- */
-  var photoCache={};
+  var photoCache={}, clipCache={};
   function fetchPhoto(query){
     var key=getUnsplash();
     if(!key) return Promise.resolve(null);
@@ -889,12 +901,27 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   }
   var EMOJI={fridge:'🧊',freezer:'🧊',thermometer:'🌡️',temperature:'🌡️',chicken:'🍗',meat:'🥩',knife:'🔪',board:'🔪',clean:'🧼',wash:'🧼',soap:'🧼',hands:'🧼',bacteria:'🦠',germ:'🦠',allergy:'⚠️',allergen:'⚠️',kitchen:'🍳',cook:'🍳',oven:'🔥',fire:'🔥',food:'🍽️',plate:'🍽️',fish:'🐟',egg:'🥚',milk:'🥛',fruit:'🍎',vegetable:'🥦',bread:'🍞',rubbish:'🗑️',bin:'🗑️',toilet:'🚽',rating:'⭐',star:'⭐',money:'💷',people:'👥',customer:'👥',hat:'👩‍🍳',apron:'👩‍🍳'};
   function emojiFor(q){ q=(q||'').toLowerCase(); for(var k in EMOJI){ if(q.indexOf(k)>=0) return EMOJI[k]; } return '📘'; }
+  function fetchClip(query){
+    var key=getPexels(); if(!key) return Promise.resolve(null);
+    if(clipCache[query]) return Promise.resolve(clipCache[query]);
+    return fetch('https://api.pexels.com/videos/search?per_page=4&orientation=landscape&size=medium&query='+encodeURIComponent(query), { headers:{ 'Authorization':key } })
+      .then(function(r){ if(!r.ok) throw new Error('clip'); return r.json(); })
+      .then(function(d){
+        var vids=(d.videos||[]);
+        for(var i=0;i<vids.length;i++){
+          var files=(vids[i].video_files||[]).filter(function(f){ return f.file_type==='video/mp4' && f.width>=640 && f.width<=1280; });
+          files.sort(function(a,b){ return a.width-b.width; });
+          if(files.length){ var out={url:files[0].link, credit:'Video: Pexels'}; clipCache[query]=out; return out; }
+        }
+        return null;
+      }).catch(function(){ return null; });
+  }
 
   /* ---------- WATCH & LEARN ---------- */
   var wl={ slides:[], concepts:[], i:0, paused:false, playing:false, lesson:null };
   function buildScript(lesson){
     var content=(lesson.title?lesson.title+'\n\n':'')+lesson.text+(lesson.summary?('\n\nSummary:\n'+lesson.summary):'');
-    var sys='You turn a lesson into a simple picture-lesson for a 16-year-old with dyslexia. Break it into 5 to 8 short steps. Return ONLY valid JSON, no markdown, in this shape: {"slides":[{"line":"very short on-screen text, max 8 words","image":"a real everyday photo search phrase, 2 to 4 words, a concrete object or scene","say":"2 to 4 short simple sentences that explain this step and give a real-life example"}],"concepts":["three short main ideas to check at the end"]}. Keep language plain and kind.';
+    var sys='You turn a lesson into a simple picture-lesson for a 16-year-old with dyslexia. Break it into 5 to 8 short steps. Return ONLY valid JSON, no markdown, in this shape: {"slides":[{"line":"very short on-screen text, max 8 words","image":"a short real-life video search phrase, 2 to 4 words, showing an everyday action or scene such as chef stirring pot, washing hands, closing fridge","say":"2 to 4 short simple sentences that explain this step and give a real-life example"}],"concepts":["three short main ideas to check at the end"]}. Keep language plain and kind.';
     return claude({ system:sys, messages:[{role:'user', content:'Make a picture-lesson from this:\n\n'+content}], max_tokens:1600, model:currentModel() })
       .then(function(txt){
         var clean=txt.replace(/```json/gi,'').replace(/```/g,'').trim();
@@ -930,19 +957,35 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     var wrap=document.getElementById('wlImgWrap'), credit=document.getElementById('wlCredit');
     wrap.innerHTML='<div class="wl-emoji">'+emojiFor(s.image)+'</div>'; credit.textContent='';
     var kb=KB[wl.i % KB.length];
-    fetchPhoto(s.image).then(function(p){
-      if(p && wl.playing && wl.i<wl.slides.length && wl.slides[wl.i]===s){
-        var img=new Image();
-        img.onload=function(){
-          if(!wl.playing || wl.slides[wl.i]!==s) return;
-          img.className='wl-kb'; img.style.opacity='0'; img.style.transition='opacity .7s ease';
-          img.style.animation=kb+' 14s ease-in-out infinite alternate'; wrap.innerHTML=''; wrap.appendChild(img);
-          requestAnimationFrame(function(){ img.style.opacity='1'; });
-          credit.textContent=p.credit;
-        };
-        img.src=p.url;
-      }
-    });
+    var still=function(){ return wl.playing && wl.i<wl.slides.length && wl.slides[wl.i]===s; };
+    function usePhoto(){
+      fetchPhoto(s.image).then(function(p){
+        if(p && still()){
+          var img=new Image();
+          img.onload=function(){
+            if(!still()) return;
+            img.className='wl-kb'; img.style.opacity='0'; img.style.transition='opacity .7s ease';
+            img.style.animation=kb+' 14s ease-in-out infinite alternate'; wrap.innerHTML=''; wrap.appendChild(img);
+            requestAnimationFrame(function(){ img.style.opacity='1'; }); credit.textContent=p.credit;
+          };
+          img.src=p.url;
+        }
+      });
+    }
+    if(getPexels()){
+      fetchClip(s.image).then(function(clip){
+        if(clip && still()){
+          var vid=document.createElement('video');
+          vid.src=clip.url; vid.muted=true; vid.loop=true; vid.autoplay=true;
+          vid.setAttribute('playsinline',''); vid.setAttribute('webkit-playsinline','');
+          vid.style.cssText='width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .6s ease;';
+          vid.onerror=function(){ if(still()) usePhoto(); };
+          wrap.innerHTML=''; wrap.appendChild(vid);
+          var pr=vid.play(); if(pr&&pr.catch) pr.catch(function(){});
+          requestAnimationFrame(function(){ vid.style.opacity='1'; }); credit.textContent=clip.credit;
+        } else if(still()){ usePhoto(); }
+      });
+    } else { usePhoto(); }
     narrate(s.say||s.line||'', function(){ if(wl.playing && !wl.paused){ setTimeout(function(){ if(wl.playing&&!wl.paused){ wl.i++; showSlide(); } }, 700); } });
   }
   function narrate(text, done){
@@ -1094,6 +1137,13 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   uStatus();
   document.getElementById('saveUnsplash').onclick=function(){ var k=document.getElementById('unsplashKey').value.trim(); if(!k){ toast('Paste the Access Key first.'); return; } localStorage.setItem('sl_unsplash', k); photoCache={}; uStatus(); toast('Photo key saved.'); };
   document.getElementById('clearUnsplash').onclick=function(){ localStorage.removeItem('sl_unsplash'); document.getElementById('unsplashKey').value=''; uStatus(); toast('Photo key removed.'); };
+
+  // pexels (video) key
+  document.getElementById('pexelsKey').value = getPexels();
+  function pxStatus(){ document.getElementById('pexelsStatus').textContent = getPexels() ? 'Real video ready. ✓ Watch & Learn will use moving clips.' : 'No video key — Watch & Learn uses still photos.'; }
+  pxStatus();
+  document.getElementById('savePexels').onclick=function(){ var k=document.getElementById('pexelsKey').value.trim(); if(!k){ toast('Paste the Pexels key first.'); return; } localStorage.setItem('sl_pexels', k); clipCache={}; pxStatus(); toast('Video key saved.'); };
+  document.getElementById('clearPexels').onclick=function(){ localStorage.removeItem('sl_pexels'); document.getElementById('pexelsKey').value=''; pxStatus(); toast('Video key removed.'); };
 
   // groq key
   document.getElementById('groqKey').value = getGroq();
