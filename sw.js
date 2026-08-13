@@ -15,7 +15,8 @@ self.addEventListener('fetch', function(e){
   // Never intercept live services or model downloads — let them hit the network directly.
   if(url.indexOf('api.anthropic.com') >= 0 || url.indexOf('api.groq.com') >= 0 ||
      url.indexOf('unsplash.com') >= 0 || url.indexOf('cdn.jsdelivr.net') >= 0 ||
-     url.indexOf('huggingface.co') >= 0 || url.indexOf('fonts.g') >= 0) return;
+     url.indexOf('huggingface.co') >= 0 || url.indexOf('fonts.g') >= 0 ||
+     url.indexOf('youtube.com') >= 0 || url.indexOf('youtu.be') >= 0 || url.indexOf('ytimg.com') >= 0) return;
   e.respondWith(
     caches.match(e.request).then(function(cached){
       return cached || fetch(e.request).catch(function(){ return caches.match('./index.html'); });
