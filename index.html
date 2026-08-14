@@ -158,12 +158,22 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   <section class="panel active" id="p-notes">
     <p class="eyebrow">Your notebook</p>
     <h2 class="title">My notes</h2>
-    <p class="lead">Type a note, or tap the <b>microphone on your keyboard</b> and just talk — the iPad writes it for you. Then have it read back, or ask for a simple summary.</p>
+    <p class="lead">Type a note, or tap <b>🎤 Talk</b> and just speak — it writes it for you. Give it a <b>Heading</b> to group notes together. Then have it read back, or ask for a simple summary.</p>
     <div class="card">
       <label class="k" for="noteTitle">Title</label>
-      <input type="text" id="noteTitle" placeholder="e.g. Food safety — the 4 Cs">
+      <div style="display:flex;gap:8px;align-items:stretch;">
+        <input type="text" id="noteTitle" placeholder="e.g. Food safety — the 4 Cs" style="flex:1;">
+        <button class="btn tomato" id="talkTitle" data-label="🎤" title="Talk the title" style="flex:0 0 auto;padding:0 14px;">🎤</button>
+      </div>
+      <label class="k" for="noteHeading">Heading — put it in a group (optional)</label>
+      <input type="text" id="noteHeading" list="headingList" placeholder="e.g. Food Safety, Nutrition, Menu Planning…" autocomplete="off">
+      <datalist id="headingList"></datalist>
       <label class="k" for="noteText">Note</label>
-      <textarea id="noteText" placeholder="Type here, or tap the keyboard microphone and speak…"></textarea>
+      <textarea id="noteText" placeholder="Type here, or tap 🎤 Talk and speak…"></textarea>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn tomato" id="talkNote" data-label="🎤 Talk">🎤 Talk</button>
+        <span id="talkNoteStatus" class="hint"></span>
+      </div>
       <div class="row" style="margin-top:12px;">
         <button class="btn primary" id="saveNote">Save note</button>
         <button class="btn ghost" id="clearNote">Clear</button>
@@ -671,12 +681,18 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     readBars=[];
     var q=(document.getElementById('noteSearch').value||'').trim().toLowerCase();
     var list=notes;
-    if(q){ list=notes.filter(function(n){ return (displayTitle(n)+' '+(n.text||'')).toLowerCase().indexOf(q)>=0; }); }
+    if(q){ list=notes.filter(function(n){ return (displayTitle(n)+' '+(n.text||'')+' '+(n.heading||'')).toLowerCase().indexOf(q)>=0; }); }
     if(!notes.length){ wrap.innerHTML='<p class="empty">No notes yet. Write one above, or use Snap a Page or Record to make one.</p>'; return; }
     if(!list.length){ wrap.innerHTML='<p class="empty">No notes match "'+q+'".</p>'; return; }
-    var lastDay=null;
-    for(var i=0;i<list.length;i++){ (function(n){
-      if(!q){ var dk=dayKey(n.ts); if(dk!==lastDay){ lastDay=dk; var hd=document.createElement('div'); hd.style.cssText='font-family:Saira Condensed,sans-serif;text-transform:uppercase;letter-spacing:1px;font-size:15px;color:var(--herb);font-weight:700;margin:18px 0 8px;'; hd.textContent=dk; wrap.appendChild(hd); } }
+    refreshHeadingDatalist();
+    // group by heading (unfiled last)
+    var groups={}, order=[];
+    for(var gi=0; gi<list.length; gi++){ var hn=(list[gi].heading||'').trim(); var key=hn||'\u0000'; if(!groups[key]){ groups[key]=[]; order.push(key); } groups[key].push(list[gi]); }
+    order.sort(function(a,b){ if(a==='\u0000') return 1; if(b==='\u0000') return -1; return 0; });
+    var lastKey=null;
+    for(var oi=0; oi<order.length; oi++){ var gk=order[oi]; var arr=groups[gk];
+      if(!q){ var title=(gk==='\u0000')?'📝 Unfiled':('📁 '+gk); var hd=document.createElement('div'); hd.style.cssText='font-family:Saira Condensed,sans-serif;text-transform:uppercase;letter-spacing:1px;font-size:16px;color:var(--herb);font-weight:700;margin:20px 0 8px;border-bottom:2px solid #e7ddc9;padding-bottom:4px;'; hd.textContent=title+'  ('+arr.length+')'; wrap.appendChild(hd); }
+    for(var i=0;i<arr.length;i++){ (function(n){
       if(n.id===editingId){ wrap.appendChild(editCard(n)); return; }
       var open = !!expanded[n.id];
       var card=document.createElement('div'); card.className='card note-item';
@@ -732,12 +748,15 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
         del.onclick=function(){ if(!window.confirm('Delete this note?')) return; if(n.hasAudio) audioDel(n.id); notes=notes.filter(function(x){return x.id!==n.id;}); delete expanded[n.id]; saveNotes(); renderNotes(); };
       }
       wrap.appendChild(card);
-    })(list[i]); }
+    })(arr[i]); }
+    }
   }
   function editCard(n){
     var card=document.createElement('div'); card.className='card note-item';
     var l1=document.createElement('label'); l1.className='k'; l1.textContent='Title'; l1.style.marginTop='0';
     var ti=document.createElement('input'); ti.type='text'; ti.value=displayTitle(n); ti.placeholder='Title';
+    var lh=document.createElement('label'); lh.className='k'; lh.textContent='Heading — group (optional)';
+    var hi=document.createElement('input'); hi.type='text'; hi.value=n.heading||''; hi.setAttribute('list','headingList'); hi.placeholder='e.g. Food Safety';
     var l2=document.createElement('label'); l2.className='k'; l2.textContent='Note';
     var ta=document.createElement('textarea'); ta.value=n.text||'';
     var hint=document.createElement('p'); hint.className='hint'; hint.innerHTML='Tip: tap the <b>keyboard microphone</b> to add more by talking.';
@@ -745,14 +764,14 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     var save=document.createElement('button'); save.className='btn primary'; save.textContent='Save changes';
     var cancel=document.createElement('button'); cancel.className='btn ghost'; cancel.textContent='Cancel';
     row.appendChild(save); row.appendChild(cancel);
-    card.appendChild(l1); card.appendChild(ti); card.appendChild(l2); card.appendChild(ta); card.appendChild(hint); card.appendChild(row);
+    card.appendChild(l1); card.appendChild(ti); card.appendChild(lh); card.appendChild(hi); card.appendChild(l2); card.appendChild(ta); card.appendChild(hint); card.appendChild(row);
     save.onclick=function(){
       var newText=ta.value.trim();
       if(!newText){ toast('The note cannot be empty.'); return; }
       var changed = (newText!==n.text) || (ti.value.trim()!==(n.title||''));
-      n.title=ti.value.trim(); n.text=newText; n.ts=Date.now();
+      n.title=ti.value.trim(); n.text=newText; n.heading=hi.value.trim(); n.ts=Date.now();
       if(changed && n.summary){ n.summary=''; } // old summary no longer matches — clear it
-      editingId=null; saveNotes(); renderNotes(); toast('Note updated.');
+      editingId=null; saveNotes(); refreshHeadingDatalist(); renderNotes(); toast('Note updated.');
     };
     cancel.onclick=function(){ editingId=null; renderNotes(); };
     setTimeout(function(){ ta.focus(); }, 30);
@@ -773,22 +792,52 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   function audioGet(key){ if(!IDB_OK) return Promise.resolve(null); return adb().then(function(db){ return new Promise(function(res,rej){ var tx=db.transaction('audio','readonly'); var rq=tx.objectStore('audio').get(key); rq.onsuccess=function(){res(rq.result||null);}; rq.onerror=function(){rej(rq.error);}; }); }).catch(function(){ return null; }); }
   function audioDel(key){ if(!IDB_OK) return Promise.resolve(); return adb().then(function(db){ return new Promise(function(res){ var tx=db.transaction('audio','readwrite'); tx.objectStore('audio').delete(key); tx.oncomplete=function(){res();}; tx.onerror=function(){res();}; }); }).catch(function(){}); }
 
-  function addNote(title, text){
+  /* ---- reusable Talk (voice → text into any field) ---- */
+  function wireTalk(btn, target, status){
+    var rec=null, chunks=[], recording=false, iv=null;
+    var label=btn.getAttribute('data-label')||btn.textContent;
+    btn.onclick=function(){
+      if(recording){ if(rec) rec.stop(); return; }
+      if(!navigator.mediaDevices||!window.MediaRecorder){ toast('This browser cannot record.'); return; }
+      navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+        chunks=[]; try{ rec=new MediaRecorder(stream); }catch(e){ rec=new MediaRecorder(stream,{mimeType:'audio/mp4'}); }
+        rec.ondataavailable=function(e){ if(e.data&&e.data.size) chunks.push(e.data); };
+        rec.onstop=function(){
+          var blob=new Blob(chunks,{type:(rec.mimeType||'audio/webm')}); stream.getTracks().forEach(function(t){t.stop();});
+          if(status) status.textContent='Turning your words into text…';
+          var done=function(txt){ var add=(txt||'').trim(); if(add){ target.value=(target.value?target.value.replace(/\s*$/,'')+' ':'')+add; } if(status) status.textContent=add?'Added. ✓':'Did not catch that — try again.'; try{target.focus();}catch(e){} };
+          if(getGroq()){ transcribeGroq(blob).then(function(segs){ done(segs.map(function(s){return s.text;}).join(' ')); }).catch(function(){ if(status) status.textContent='Could not transcribe. Check the Groq key.'; }); return; }
+          if(isPhone()){ if(status) status.textContent='On a phone, use the keyboard microphone instead.'; return; }
+          window.SL_loadWhisper(function(){}).then(function(){ return blobToMono16k(blob); }).then(function(f){ return window.SL_transcribe(f); }).then(done).catch(function(){ if(status) status.textContent='Could not transcribe here.'; });
+        };
+        rec.start(); recording=true; btn.textContent='■ Stop'; if(status) status.textContent='Listening… tap Stop when done.';
+        iv=setInterval(function(){ if(rec && rec.state==='inactive'){ recording=false; btn.textContent=label; clearInterval(iv); } }, 400);
+      }).catch(function(){ toast('Microphone permission not given.'); });
+    };
+  }
+  wireTalk(document.getElementById('talkTitle'), document.getElementById('noteTitle'), document.getElementById('talkNoteStatus'));
+  wireTalk(document.getElementById('talkNote'), document.getElementById('noteText'), document.getElementById('talkNoteStatus'));
+
+  function headingsList(){ var set={}, out=[]; for(var i=0;i<notes.length;i++){ var h=(notes[i].heading||'').trim(); if(h && !set[h]){ set[h]=1; out.push(h); } } return out; }
+  function refreshHeadingDatalist(){ var dl=document.getElementById('headingList'); if(!dl) return; dl.innerHTML=''; var hs=headingsList(); for(var i=0;i<hs.length;i++){ var o=document.createElement('option'); o.value=hs[i]; dl.appendChild(o); } }
+
+  function addNote(title, text, heading){
     var t=(title||'').trim();
     if(!t || t==='From a photo' || t==='From a recording'){ var d=deriveTitle(text); if(d) t=d; else if(!t) t='Note'; }
-    var note={ id:'n'+Date.now(), title:t, text:text||'', summary:'', ts:Date.now() };
-    notes.unshift(note); saveNotes(); renderNotes();
+    var note={ id:'n'+Date.now(), title:t, text:text||'', summary:'', heading:(heading||'').trim(), ts:Date.now() };
+    notes.unshift(note); saveNotes(); refreshHeadingDatalist(); renderNotes();
     return note;
   }
   (function(){ var s=document.getElementById('noteSearch'); if(s) s.addEventListener('input', function(){ renderNotes(); }); })();
   document.getElementById('saveNote').onclick=function(){
     var t=document.getElementById('noteText').value.trim();
     if(!t){ toast('Write something first.'); return; }
-    addNote(document.getElementById('noteTitle').value.trim(), t);
-    document.getElementById('noteTitle').value=''; document.getElementById('noteText').value='';
+    addNote(document.getElementById('noteTitle').value.trim(), t, document.getElementById('noteHeading').value.trim());
+    document.getElementById('noteTitle').value=''; document.getElementById('noteText').value=''; document.getElementById('noteHeading').value='';
+    document.getElementById('talkNoteStatus').textContent='';
     toast('Note saved.');
   };
-  document.getElementById('clearNote').onclick=function(){ document.getElementById('noteTitle').value=''; document.getElementById('noteText').value=''; };
+  document.getElementById('clearNote').onclick=function(){ document.getElementById('noteTitle').value=''; document.getElementById('noteText').value=''; document.getElementById('noteHeading').value=''; document.getElementById('talkNoteStatus').textContent=''; };
 
   /* ---------- SNAP (photo -> text) ---------- */
   var snapInput=document.getElementById('snapInput');
@@ -986,7 +1035,12 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       var d=document.createElement('div'); d.className='msg '+(m.role==='user'?'me':'ai');
       d.textContent=(typeof m.display==='string')?m.display:m.content;
       wrap.appendChild(d);
-      if(m.role==='assistant'){ d.appendChild(makeReadBar(function(){ return m.content; })); }
+      if(m.role==='assistant' && (typeof m.content==='string') && m.content!=='…'){
+        d.appendChild(makeReadBar(function(){ return m.content; }));
+        var sv=document.createElement('button'); sv.className='btn ghost small'; sv.style.marginTop='6px'; sv.textContent='＋ Save to notes';
+        sv.onclick=function(){ var h=window.prompt('Save under which heading? (leave blank for none)', ''); if(h===null) return; addNote('From Ask for help', m.content, h.trim()); toast('Saved to My notes.'); };
+        d.appendChild(sv);
+      }
     })(chat[i]); }
     wrap.scrollTop=wrap.scrollHeight;
   }
