@@ -258,6 +258,17 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     <p class="eyebrow">Set up &amp; make it yours</p>
     <h2 class="title">Settings</h2>
 
+    <div class="card" style="border:2px solid var(--herb);">
+      <label class="k">🛟 Back up her work</label>
+      <p class="hint">Saves ALL her notes to a file you keep. Do this often, and email the file to yourself. If a browser ever clears its data, restore it here and nothing is lost. <b id="persistState"></b></p>
+      <div class="row">
+        <button class="btn primary" id="backupBtn">⬇ Back up everything</button>
+        <input type="file" id="restoreInput" accept="application/json,.json" style="display:none;">
+        <button class="btn amber" id="restoreBtn">⬆ Restore from a backup</button>
+      </div>
+      <p class="hint" style="margin-top:8px;">(The written notes and summaries are saved. Raw recording audio is too large to include — but the timestamped transcripts are.)</p>
+    </div>
+
     <div class="card">
       <label class="k">Anthropic API key</label>
       <p class="hint">Needed for photo-to-text, summaries and the tutor. Get one at <b>console.anthropic.com</b>. It is saved only on this device, never in the app's code.</p>
@@ -1591,6 +1602,41 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   document.addEventListener('visibilitychange', function(){ if(document.hidden) stopSpeak(); });
 
   applySettings(); renderNotes(); renderChat(); renderVideos();
+
+  /* ---- protect storage from being auto-cleared, and enable backups ---- */
+  (function(){
+    if(navigator.storage && navigator.storage.persist){
+      navigator.storage.persisted().then(function(p){
+        if(p){ var s=document.getElementById('persistState'); if(s) s.textContent='Storage is protected on this device. ✓'; }
+        else { navigator.storage.persist().then(function(granted){ var s=document.getElementById('persistState'); if(s) s.textContent = granted ? 'Storage is now protected on this device. ✓' : 'Tip: install this app (Add to Home Screen) to protect its storage.'; }); }
+      });
+    }
+  })();
+  function backupData(){
+    var dump={ _app:'studylab', _v:1, _at:new Date().toISOString() };
+    for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k && k.indexOf('sl_')===0) dump[k]=localStorage.getItem(k); }
+    var blob=new Blob([JSON.stringify(dump)], {type:'application/json'});
+    var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='studylab-backup-'+new Date().toISOString().slice(0,10)+'.json'; document.body.appendChild(a); a.click(); a.remove();
+    toast('Backup saved. Keep it safe (email it to yourself).');
+  }
+  document.getElementById('backupBtn').onclick=backupData;
+  document.getElementById('restoreBtn').onclick=function(){ document.getElementById('restoreInput').click(); };
+  document.getElementById('restoreInput').onchange=function(){
+    var f=this.files[0]; if(!f) return;
+    var r=new FileReader();
+    r.onload=function(){
+      try{
+        var obj=JSON.parse(r.result);
+        if(!obj || obj._app!=='studylab'){ toast('That does not look like a Study Lab backup.'); return; }
+        if(!window.confirm('Restore this backup? It will replace what is on this device now with the saved notes.')) return;
+        var n=0; for(var k in obj){ if(obj.hasOwnProperty(k) && k.indexOf('sl_')===0){ localStorage.setItem(k, obj[k]); n++; } }
+        toast('Restored '+n+' items. Reloading…');
+        setTimeout(function(){ location.reload(); }, 900);
+      }catch(e){ toast('Could not read that backup file.'); }
+    };
+    r.readAsText(f);
+  };
 })();
 </script>
 <script>
