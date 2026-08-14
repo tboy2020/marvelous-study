@@ -344,11 +344,18 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     <div id="wlCredit" style="opacity:.5;font-size:12px;margin-top:12px;"></div>
     <div id="wlCheck" style="display:none;width:100%;max-width:640px;"></div>
   </div>
-  <div id="wlControls" style="padding:12px 16px calc(16px + env(safe-area-inset-bottom,0));background:rgba(0,0,0,.2);">
-    <div style="display:flex;gap:10px;max-width:640px;margin:0 auto;">
-      <button id="wlBack" class="btn ghost" style="flex:1;">‹ Back</button>
-      <button id="wlPlay" class="btn amber" style="flex:2;">⏸ Pause</button>
-      <button id="wlNext" class="btn ghost" style="flex:1;">Next ›</button>
+  <div id="wlControls" style="padding:10px 16px calc(16px + env(safe-area-inset-bottom,0));background:rgba(0,0,0,.2);">
+    <div style="max-width:640px;margin:0 auto;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span id="wlTimeNow" style="font-size:13px;opacity:.85;min-width:42px;">0:00</span>
+        <input type="range" id="wlSeek" min="0" max="100" step="0.1" value="0" style="flex:1;accent-color:var(--amber);height:26px;">
+        <span id="wlTimeTotal" style="font-size:13px;opacity:.85;min-width:42px;text-align:right;">0:00</span>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:8px;">
+        <button id="wlBack" class="btn ghost" style="flex:1;">⏪ 10s</button>
+        <button id="wlPlay" class="btn amber" style="flex:2;">⏸ Pause</button>
+        <button id="wlNext" class="btn ghost" style="flex:1;">10s ⏩</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1005,23 +1012,48 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     document.getElementById('wlLine').textContent='Getting your lesson ready…';
     document.getElementById('wlSay').textContent=''; document.getElementById('wlImgWrap').textContent='📘'; document.getElementById('wlCredit').textContent='';
     document.getElementById('wlCount').textContent='';
-    var go=function(obj){ wl.slides=obj.slides; wl.concepts=obj.concepts||[]; lesson.script=obj; saveNotes(); wl.i=0; wl.paused=false; wl.playing=true; showSlide(); };
+    var go=function(obj){ wl.slides=obj.slides; wl.concepts=obj.concepts||[]; lesson.script=obj; saveNotes(); wl.paused=false; wl.playing=true; wl.visSlide=-1; wl.scrubbing=false; buildTimeline(); seekUI(); playFrom(0); };
     if(lesson.script && lesson.script.slides){ go(lesson.script); }
     else { buildScript(lesson).then(go).catch(function(e){ toast('Could not build the lesson. Try again.'); closeWL(); }); }
   }
   var KB=['kbA','kbB','kbC','kbD'];
   function animIn(el){ el.style.animation='none'; void el.offsetWidth; el.classList.add('wl-fade'); el.style.animation=''; }
-  function showSlide(){
-    if(wl.i>=wl.slides.length){ showCheck(); return; }
-    var s=wl.slides[wl.i];
-    document.getElementById('wlCount').textContent=(wl.i+1)+' of '+wl.slides.length;
+  function wlRateNow(){ return Math.min(1.18, settings.rate+0.14); }
+  function wlGapNow(){ return Math.max(50, gap()-110)/1000; }
+  /* build a sentence-level timeline so it plays and scrubs like one video */
+  function buildTimeline(){
+    var tl=[], t=0, wps=2.5*wlRateNow(); // words per second estimate
+    for(var i=0;i<wl.slides.length;i++){
+      var sents=splitSentences(wl.slides[i].say||wl.slides[i].line||'');
+      if(!sents.length) sents=[wl.slides[i].line||''];
+      for(var k=0;k<sents.length;k++){
+        var words=sents[k].split(/\s+/).length;
+        var dur=Math.max(1.1, words/wps)+wlGapNow();
+        tl.push({slide:i, text:sents[k], start:t, dur:dur});
+        t+=dur;
+      }
+      t+=0.35; // breath between slides
+    }
+    wl.timeline=tl; wl.total=t;
+  }
+  function wlFmt(s){ s=Math.max(0,Math.round(s)); var m=Math.floor(s/60); return m+':'+((s%60)<10?'0':'')+(s%60); }
+  function seekUI(){
+    var pct = wl.total? (wl.t/wl.total*100) : 0;
+    var sk=document.getElementById('wlSeek'); if(!wl.scrubbing) sk.value=pct;
+    document.getElementById('wlTimeNow').textContent=wlFmt(wl.t);
+    document.getElementById('wlTimeTotal').textContent=wlFmt(wl.total||0);
+  }
+  function renderSlideVisual(i){
+    if(wl.visSlide===i) return; wl.visSlide=i;
+    var s=wl.slides[i];
+    document.getElementById('wlCount').textContent=(i+1)+' of '+wl.slides.length;
     var lineEl=document.getElementById('wlLine'), sayEl=document.getElementById('wlSay');
     lineEl.textContent=s.line||''; sayEl.textContent=s.say||'';
     animIn(lineEl); animIn(sayEl);
     var wrap=document.getElementById('wlImgWrap'), credit=document.getElementById('wlCredit');
     wrap.innerHTML='<div class="wl-emoji">'+emojiFor(s.image)+'</div>'; credit.textContent='';
-    var kb=KB[wl.i % KB.length];
-    var still=function(){ return wl.playing && wl.i<wl.slides.length && wl.slides[wl.i]===s; };
+    var kb=KB[i % KB.length];
+    var still=function(){ return wl.playing && wl.visSlide===i; };
     function usePhoto(){
       fetchPhoto(s.image).then(function(p){
         if(p && still()){
@@ -1050,26 +1082,37 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
         } else if(still()){ usePhoto(); }
       });
     } else { usePhoto(); }
-    narrate(s.say||s.line||'', function(){ if(wl.playing && !wl.paused){ setTimeout(function(){ if(wl.playing&&!wl.paused){ wl.i++; showSlide(); } }, 350); } });
   }
-  function narrate(text, done){
-    stopSpeak();
-    var chunks=splitSentences(text); var idx=0;
-    var wlRate=Math.min(1.18, settings.rate+0.14);   // a touch faster than reading speed
-    var wlGap=Math.max(50, gap()-110);                // shorter pause between sentences
-    function next(){
-      if(!wl.playing||wl.paused) return;
-      if(idx>=chunks.length){ if(done) done(); return; }
-      var u=new SpeechSynthesisUtterance(chunks[idx]); if(voice)u.voice=voice; u.lang='en-GB'; u.rate=wlRate;
-      u.onend=function(){ if(wl.playing&&!wl.paused){ idx++; setTimeout(next, wlGap); } };
-      u.onerror=function(){ if(wl.playing&&!wl.paused){ idx++; setTimeout(next, wlGap); } };
-      try{ synth.cancel(); synth.speak(u); }catch(e){}
-    }
-    next();
+  function playFrom(k){
+    if(k>=wl.timeline.length){ wl.t=wl.total; seekUI(); showCheck(); return; }
+    wl.k=k;
+    var e=wl.timeline[k];
+    wl.t=e.start; renderSlideVisual(e.slide); seekUI();
+    var u=new SpeechSynthesisUtterance(e.text); if(voice)u.voice=voice; u.lang='en-GB'; u.rate=wlRateNow();
+    var t0=Date.now();
+    if(wl.tick) clearInterval(wl.tick);
+    wl.tick=setInterval(function(){
+      if(!wl.playing||wl.paused){ clearInterval(wl.tick); return; }
+      wl.t=Math.min(e.start+e.dur, e.start+(Date.now()-t0)/1000); seekUI();
+    }, 200);
+    u.onend=function(){ if(wl.playing&&!wl.paused&&wl.k===k){ playFrom(k+1); } };
+    u.onerror=function(){ if(wl.playing&&!wl.paused&&wl.k===k){ playFrom(k+1); } };
+    try{ synth.cancel(); synth.speak(u); }catch(err){ playFrom(k+1); }
+  }
+  function entryAt(t){
+    for(var i=0;i<wl.timeline.length;i++){ var e=wl.timeline[i]; if(t < e.start+e.dur) return i; }
+    return wl.timeline.length-1;
+  }
+  function wlSeekTo(t){
+    t=Math.max(0, Math.min(wl.total-0.01, t));
+    try{synth.cancel();}catch(e){}
+    if(wl.tick) clearInterval(wl.tick);
+    wl.paused=false; wlSetPlay();
+    playFrom(entryAt(t));
   }
   function wlSetPlay(){ document.getElementById('wlPlay').textContent = wl.paused ? '▶ Continue' : '⏸ Pause'; }
   function showCheck(){
-    wl.playing=false; stopSpeak();
+    wl.playing=false; if(wl.tick) clearInterval(wl.tick); stopSpeak();
     document.getElementById('wlControls').style.display='none';
     document.getElementById('wlImgWrap').textContent='🎉'; document.getElementById('wlImgWrap').innerHTML='🎉';
     document.getElementById('wlLine').textContent='Well done! Did you understand these?';
@@ -1112,11 +1155,28 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       links.appendChild(l1); container.appendChild(links);
     });
   }
-  function closeWL(){ wl.playing=false; wl.paused=false; stopSpeak(); document.getElementById('wl').style.display='none'; document.getElementById('wlImgWrap').innerHTML='📘'; }
+  function closeWL(){ wl.playing=false; wl.paused=false; if(wl.tick) clearInterval(wl.tick); stopSpeak(); document.getElementById('wl').style.display='none'; document.getElementById('wlImgWrap').innerHTML='📘'; wl.visSlide=-1; }
   document.getElementById('wlExit').onclick=closeWL;
-  document.getElementById('wlPlay').onclick=function(){ if(!wl.playing) return; if(wl.paused){ wl.paused=false; wlSetPlay(); showSlide(); } else { wl.paused=true; stopSpeak(); wlSetPlay(); } };
-  document.getElementById('wlNext').onclick=function(){ if(!wl.playing) return; stopSpeak(); wl.paused=false; wlSetPlay(); wl.i++; showSlide(); };
-  document.getElementById('wlBack').onclick=function(){ if(!wl.playing) return; stopSpeak(); wl.paused=false; wlSetPlay(); wl.i=Math.max(0,wl.i-1); showSlide(); };
+  document.getElementById('wlPlay').onclick=function(){
+    if(!wl.playing) return;
+    if(wl.paused){ wl.paused=false; wlSetPlay(); playFrom(entryAt(wl.t)); }
+    else { wl.paused=true; try{synth.cancel();}catch(e){} if(wl.tick) clearInterval(wl.tick); wlSetPlay(); }
+  };
+  document.getElementById('wlNext').onclick=function(){ if(!wl.playing) return; wlSeekTo(wl.t+10); };
+  document.getElementById('wlBack').onclick=function(){ if(!wl.playing) return; wlSeekTo(wl.t-10); };
+  (function(){
+    var sk=document.getElementById('wlSeek');
+    function scrubStart(){ if(wl.playing) wl.scrubbing=true; }
+    function scrubEnd(){
+      if(!wl.playing||!wl.scrubbing) return;
+      wl.scrubbing=false;
+      wlSeekTo((parseFloat(sk.value)/100)*wl.total);
+    }
+    sk.addEventListener('mousedown', scrubStart); sk.addEventListener('touchstart', scrubStart);
+    sk.addEventListener('mouseup', scrubEnd); sk.addEventListener('touchend', scrubEnd);
+    sk.addEventListener('change', scrubEnd);
+    sk.addEventListener('input', function(){ if(wl.scrubbing){ document.getElementById('wlTimeNow').textContent=wlFmt((parseFloat(sk.value)/100)*(wl.total||0)); } });
+  })();
 
   /* ---------- VIDEO LESSONS ---------- */
   var videos = load('sl_videos', []);
