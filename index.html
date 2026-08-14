@@ -27,15 +27,15 @@ html,body{margin:0;padding:0;}
 body{background:var(--paper);color:var(--ink);font-family:'Lexend',system-ui,sans-serif;-webkit-text-size-adjust:100%;min-height:100vh;}
 
 header{background:var(--herb);color:#F7F3E8;padding:calc(14px + env(safe-area-inset-top,0)) 18px 12px;position:sticky;top:0;z-index:40;}
-.head-row{display:flex;align-items:center;gap:12px;max-width:920px;margin:0 auto;}
+.head-row{display:flex;align-items:center;gap:12px;max-width:1180px;margin:0 auto;}
 .brand b{font-family:'Saira Condensed',sans-serif;font-weight:700;font-size:29px;letter-spacing:.5px;text-transform:uppercase;display:block;line-height:1;}
 .brand span{font-size:12.5px;opacity:.82;}
 nav.tabs{background:var(--herb);position:sticky;z-index:39;padding:0 12px 12px;}
-.tabs-inner{display:flex;gap:8px;max-width:920px;margin:0 auto;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.tabs-inner{display:flex;gap:8px;max-width:1180px;margin:0 auto;overflow-x:auto;-webkit-overflow-scrolling:touch;}
 .tab{flex:0 0 auto;border:none;cursor:pointer;background:rgba(255,255,255,.10);color:#EDE6D4;font-family:'Saira Condensed',sans-serif;font-weight:600;font-size:16px;letter-spacing:.4px;text-transform:uppercase;padding:10px 15px;border-radius:11px;}
 .tab.active{background:var(--paper);color:var(--herb);}
 
-main{max-width:920px;margin:0 auto;padding:20px 16px 60px;}
+main{max-width:1180px;margin:0 auto;padding:20px 16px 60px;}
 .panel{display:none;}.panel.active{display:block;}
 .eyebrow{font-family:'Saira Condensed',sans-serif;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;font-size:14px;color:var(--amber);margin:0 0 4px;}
 h2.title{font-family:'Saira Condensed',sans-serif;font-weight:700;font-size:32px;margin:0 0 14px;color:var(--herb);letter-spacing:.5px;}
@@ -166,7 +166,10 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
         <button class="btn tomato" id="talkTitle" data-label="🎤" title="Talk the title" style="flex:0 0 auto;padding:0 14px;">🎤</button>
       </div>
       <label class="k" for="noteHeading">Heading — put it in a group (optional)</label>
-      <input type="text" id="noteHeading" list="headingList" placeholder="e.g. Food Safety, Nutrition, Menu Planning…" autocomplete="off">
+      <div style="display:flex;gap:8px;align-items:stretch;">
+        <input type="text" id="noteHeading" list="headingList" placeholder="e.g. Food Safety, Nutrition, Menu Planning…" autocomplete="off" style="flex:1;">
+        <button class="btn tomato" id="talkHeading" data-label="🎤" title="Talk the heading" style="flex:0 0 auto;padding:0 14px;">🎤</button>
+      </div>
       <datalist id="headingList"></datalist>
       <label class="k" for="noteText">Note</label>
       <textarea id="noteText" placeholder="Type here, or tap 🎤 Talk and speak…"></textarea>
@@ -833,6 +836,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     };
   }
   wireTalk(document.getElementById('talkTitle'), document.getElementById('noteTitle'), document.getElementById('talkNoteStatus'));
+  wireTalk(document.getElementById('talkHeading'), document.getElementById('noteHeading'), document.getElementById('talkNoteStatus'));
   wireTalk(document.getElementById('talkNote'), document.getElementById('noteText'), document.getElementById('talkNoteStatus'));
 
   function headingsList(){ var set={}, out=[]; for(var i=0;i<notes.length;i++){ var h=(notes[i].heading||'').trim(); if(h && !set[h]){ set[h]=1; out.push(h); } } return out; }
