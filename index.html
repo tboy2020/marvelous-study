@@ -711,9 +711,14 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       card.appendChild(head);
 
       if(open){
-        var body=document.createElement('div'); body.className='readtext'; body.style.marginTop='12px'; body.innerHTML=tsBold(n.text);
-        card.appendChild(body);
-        card.appendChild(makeReadBar(function(){ return displayTitle(n)+'. '+n.text; }));
+        var twoCol=document.createElement('div'); twoCol.style.cssText='display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;';
+
+        // FULL NOTES column
+        var notesCol=document.createElement('div'); notesCol.style.cssText='flex:1 1 320px;min-width:0;';
+        var nLbl=document.createElement('span'); nLbl.className='lbl'; nLbl.textContent='Full notes';
+        var body=document.createElement('div'); body.className='readtext'; body.style.marginTop='6px'; body.innerHTML=tsBold(n.text);
+        notesCol.appendChild(nLbl); notesCol.appendChild(body);
+        notesCol.appendChild(makeReadBar(function(){ return displayTitle(n)+'. '+n.text; }));
         if(n.hasAudio){
           var aw=document.createElement('div'); aw.style.marginTop='12px';
           var albl=document.createElement('div'); albl.className='meta'; albl.textContent='🎧 Your recording — tap a green time to jump to that moment';
@@ -721,19 +726,31 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
           audioGet(n.id).then(function(blob){ if(blob){ au.src=URL.createObjectURL(blob); } else { albl.textContent='🎧 Recording not found on this device.'; } });
           var adel=document.createElement('button'); adel.className='btn ghost small'; adel.style.marginTop='6px'; adel.textContent='🗑 Delete audio (keep notes)';
           adel.onclick=function(){ if(!window.confirm('Delete just the recording audio? Your written notes stay.'))return; audioDel(n.id).then(function(){ n.hasAudio=false; saveNotes(); renderNotes(); }); };
-          aw.appendChild(albl); aw.appendChild(au); aw.appendChild(adel); card.appendChild(aw);
+          aw.appendChild(albl); aw.appendChild(au); aw.appendChild(adel); notesCol.appendChild(aw);
           var chips=body.querySelectorAll('.ts-chip');
           for(var ci=0; ci<chips.length; ci++){ (function(chip){ chip.style.cursor='pointer'; chip.title='Tap to hear this part'; chip.onclick=function(){ var sec=parseFloat(chip.getAttribute('data-sec'))||0; try{ au.currentTime=sec; var pr=au.play(); if(pr&&pr.catch)pr.catch(function(){}); }catch(e){} aw.scrollIntoView({behavior:'smooth',block:'nearest'}); }; })(chips[ci]); }
         }
-        var actions=document.createElement('div'); actions.className='row'; actions.style.marginTop='10px';
+        twoCol.appendChild(notesCol);
+
+        // SIMPLE SUMMARY column (only when a summary exists)
+        if(n.summary){
+          var sumCol=document.createElement('div'); sumCol.style.cssText='flex:1 1 320px;min-width:0;';
+          var sLbl=document.createElement('span'); sLbl.className='lbl'; sLbl.textContent='Simple summary';
+          var sBody=document.createElement('div'); sBody.className='readtext'; sBody.style.cssText='margin-top:6px;font-size:19px;background:#fbf6ea;border-radius:12px;padding:12px 14px;'; sBody.textContent=n.summary;
+          sumCol.appendChild(sLbl); sumCol.appendChild(sBody);
+          sumCol.appendChild(makeReadBar(function(){ return n.summary; }));
+          twoCol.appendChild(sumCol);
+        }
+        card.appendChild(twoCol);
+
+        var actions=document.createElement('div'); actions.className='row'; actions.style.marginTop='12px';
         var watch=document.createElement('button'); watch.className='btn amber small'; watch.textContent='🎬 Watch & Learn';
         var slides=document.createElement('button'); slides.className='btn amber small'; slides.textContent='🖼 Slides';
         var stick=document.createElement('button'); stick.className='btn amber small'; stick.textContent='🌈 Stickers';
-        var sum=document.createElement('button'); sum.className='btn primary small'; sum.textContent='✨ Summarise';
+        var sum=document.createElement('button'); sum.className='btn primary small'; sum.textContent=n.summary?'✨ Re-summarise':'✨ Summarise';
         var edit=document.createElement('button'); edit.className='btn ghost small'; edit.textContent='✏️ Edit';
         var del=document.createElement('button'); del.className='btn ghost small'; del.textContent='🗑 Delete';
         actions.appendChild(watch); actions.appendChild(slides); actions.appendChild(stick); actions.appendChild(sum); actions.appendChild(edit); actions.appendChild(del); card.appendChild(actions);
-        if(n.summary){ card.appendChild(summaryBox(n)); }
         watch.onclick=function(){ startWatchLearn(n); };
         slides.onclick=function(){ openDeck(n); };
         stick.onclick=function(){ openStickers(n); };
