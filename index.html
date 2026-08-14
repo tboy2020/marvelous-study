@@ -222,6 +222,13 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     <p class="eyebrow">Your tutor</p>
     <h2 class="title">Ask for help</h2>
     <p class="lead">Ask anything about Hospitality and Catering — theory, coursework, or the practical exam. She explains simply and helps you understand it in your own words.</p>
+    <div class="card" style="padding:12px 14px;">
+      <label class="k" style="margin-top:0;">How should I explain?</label>
+      <div class="opts" id="askMode">
+        <button class="opt sel" data-val="simple">🌱 Simplify — short &amp; easy</button>
+        <button class="opt" data-val="full">📖 Full — more detail</button>
+      </div>
+    </div>
     <div id="chatWrap" class="card" style="min-height:120px;"></div>
     <div class="card">
       <div id="askImgPreview"></div>
@@ -1111,7 +1118,12 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
 
   /* ---------- ASK (tutor chat) ---------- */
   var chat=[]; var askImgFile=null;
-  var TUTOR='You are a warm, patient tutor for Marvelous, a 16-year-old student in the UK who has dyslexia. She is studying WJEC Level 1/2 Hospitality and Catering. Always explain in short, simple sentences, one idea at a time. Be encouraging and kind. Help her UNDERSTAND and IMPROVE her own work — never write her coursework or NEA for her to hand in as her own, because that is cheating and could get her disqualified; instead guide her, ask gentle questions, explain ideas with examples, and help her put things in her own words. For the practical exam, give clear, safe, practical tips. Keep answers fairly short unless she asks for more. Write in plain sentences only. Do not use markdown, asterisks, hash signs, bullet symbols, or emojis — just clear words and full stops.';
+  var askMode = localStorage.getItem('sl_askmode') || 'simple';
+  var TUTOR_BASE='You are a warm, patient, encouraging tutor for Marvelous, a 16-year-old student in the UK who has dyslexia, studying WJEC Level 1/2 Hospitality and Catering. Help her UNDERSTAND and IMPROVE her own work — never write her coursework or NEA for her to hand in as her own, because that is cheating and could get her disqualified; instead guide her, ask gentle questions, explain ideas with examples, and help her put things in her own words. For the practical exam, give clear, safe, practical tips. Do not use markdown, asterisks, hash signs, bullet symbols, or emojis — just clear words and full stops.';
+  var TUTOR_SIMPLE=' EXPLAIN STYLE: Keep it very simple. Use short sentences, one idea at a time, and everyday examples. Keep the whole answer fairly short.';
+  var TUTOR_FULL=' EXPLAIN STYLE: Give a fuller, more detailed answer. You may use the proper subject terms (and explain them), add more depth and examples, and cover the topic more completely — while still writing in clear, readable sentences.';
+  function tutorPrompt(mode){ return TUTOR_BASE + ((mode||askMode)==='full' ? TUTOR_FULL : TUTOR_SIMPLE); }
+  (function(){ var g=document.getElementById('askMode'); if(!g) return; var k=g.querySelectorAll('.opt'); for(var i=0;i<k.length;i++) k[i].classList.toggle('sel', k[i].getAttribute('data-val')===askMode); g.addEventListener('click', function(e){ if(!e.target.classList.contains('opt'))return; var kk=this.querySelectorAll('.opt'); for(var j=0;j<kk.length;j++) kk[j].classList.remove('sel'); e.target.classList.add('sel'); askMode=e.target.getAttribute('data-val'); localStorage.setItem('sl_askmode', askMode); }); })();
   function renderChat(){
     var wrap=document.getElementById('chatWrap'); wrap.innerHTML='';
     if(!chat.length){ wrap.innerHTML='<p class="empty">Ask a question to begin. For example: "What are the 4 Cs of food safety?" or "Help me understand my coursework task."</p>'; return; }
@@ -1121,9 +1133,12 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       wrap.appendChild(d);
       if(m.role==='assistant' && (typeof m.content==='string') && m.content!=='…'){
         d.appendChild(makeReadBar(function(){ return m.content; }));
-        var sv=document.createElement('button'); sv.className='btn ghost small'; sv.style.marginTop='6px'; sv.textContent='＋ Save to notes';
+        var bar=document.createElement('div'); bar.className='row'; bar.style.marginTop='6px';
+        var redo=document.createElement('button'); redo.className='btn ghost small'; redo.textContent = (askMode==='full') ? '🌱 Simplify this' : '📖 More detail';
+        redo.onclick=function(){ var want=(askMode==='full')?'simple':'full'; reExplain(m, want, redo); };
+        var sv=document.createElement('button'); sv.className='btn ghost small'; sv.textContent='＋ Save to notes';
         sv.onclick=function(){ openSaveModal({ text: m.content, onSaved: function(){} }); };
-        d.appendChild(sv);
+        bar.appendChild(redo); bar.appendChild(sv); d.appendChild(bar);
       }
     })(chat[i]); }
     wrap.scrollTop=wrap.scrollHeight;
@@ -1188,7 +1203,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       userMsg.content=content; chat.push(userMsg);
       var thinking={role:'assistant', content:'…', display:'…'}; chat.push(thinking); renderChat();
       var apiMsgs = chat.filter(function(m){return m!==thinking;}).map(function(m){ return { role:m.role, content:m.content }; });
-      return claude({ system:TUTOR, messages:apiMsgs, max_tokens:1000 }).then(function(ans){
+      return claude({ system:tutorPrompt(), messages:apiMsgs, max_tokens:(askMode==='full'?1500:1000) }).then(function(ans){
         chat.pop(); chat.push({role:'assistant', content:ans, display:ans}); renderChat();
       });
     }).catch(function(e){
@@ -1196,6 +1211,17 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       renderChat(); toast(e.message||'Could not get an answer.');
     });
   };
+  function reExplain(m, want, btn){
+    if(!getKey()){ needKey(); return; }
+    if(btn){ btn.disabled=true; btn.textContent='Working…'; }
+    var base = (typeof m.content==='string') ? m.content : '';
+    var ask = (want==='simple')
+      ? 'Please explain this again, but much simpler: short sentences, one idea at a time, everyday examples, fairly short. Same information, easier words.'
+      : 'Please explain this again with more detail and depth: use the proper terms and explain them, add more examples, and cover it more fully. Keep it clear and readable.';
+    claude({ system:tutorPrompt(want), messages:[{role:'user', content:ask+'\n\nHere is what to re-explain:\n\n'+base}], max_tokens:(want==='full'?1500:1000) })
+    .then(function(ans){ chat.push({role:'assistant', content:ans, display:ans}); renderChat(); })
+    .catch(function(e){ toast(e.message||'Could not redo it.'); if(btn){ btn.disabled=false; } });
+  }
 
   /* ---------- photos (Unsplash) ---------- */
   var photoCache={}, clipCache={};
