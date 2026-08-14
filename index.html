@@ -435,6 +435,12 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   </div>
 </div>
 
+<div id="zoomBar" style="position:fixed;right:12px;bottom:14px;z-index:85;display:flex;gap:6px;align-items:center;background:var(--herb);color:#fff;border-radius:22px;padding:5px 8px;box-shadow:0 4px 14px rgba(0,0,0,.28);opacity:.94;">
+  <button id="zoomOut" title="Smaller" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:20px;font-weight:800;cursor:pointer;line-height:1;">A−</button>
+  <span id="zoomVal" style="font-size:13px;min-width:40px;text-align:center;font-family:'Saira Condensed',sans-serif;font-weight:700;">100%</span>
+  <button id="zoomIn" title="Bigger" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:20px;font-weight:800;cursor:pointer;line-height:1;">A+</button>
+</div>
+
 <footer>
   <p class="verse">"Commit thy works unto the LORD, and thy thoughts shall be established." — Proverbs 16:3</p>
   <p class="amhg">Glory to God alone · AMHG</p>
@@ -1071,7 +1077,15 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     var p=document.getElementById('askImgPreview'); p.innerHTML='';
     if(askImgFile){ var img=document.createElement('img'); img.style.cssText='max-height:120px;border-radius:10px;margin-bottom:8px;'; img.src=URL.createObjectURL(askImgFile); p.appendChild(img); }
   };
-  document.getElementById('askClear').onclick=function(){ chat=[]; askImgFile=null; document.getElementById('askImgPreview').innerHTML=''; renderChat(); };
+  document.getElementById('askClear').addEventListener('click', function(){
+    stopSpeak();
+    chat=[]; askImgFile=null;
+    var p=document.getElementById('askImgPreview'); if(p) p.innerHTML='';
+    var inp=document.getElementById('askInput'); if(inp) inp.value='';
+    var st=document.getElementById('askRecStatus'); if(st) st.textContent='';
+    renderChat();
+    toast('Chat cleared.');
+  });
 
   /* record straight into the Ask question box */
   var askRec=null, askChunks=[], askRecording=false;
@@ -1697,6 +1711,17 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   document.addEventListener('visibilitychange', function(){ if(document.hidden) stopSpeak(); });
 
   applySettings(); renderNotes(); renderChat(); renderVideos();
+
+  /* ---- whole-canvas zoom (increase/decrease at will) ---- */
+  var zoom = parseFloat(localStorage.getItem('sl_zoom')||'1'); if(isNaN(zoom)) zoom=1;
+  function applyZoom(){
+    var m=document.querySelector('main'); if(m){ m.style.zoom = zoom; if(!('zoom' in m.style) || m.style.zoom===''){ m.style.transform='scale('+zoom+')'; m.style.transformOrigin='top center'; } }
+    var v=document.getElementById('zoomVal'); if(v) v.textContent=Math.round(zoom*100)+'%';
+    try{ localStorage.setItem('sl_zoom', String(zoom)); }catch(e){}
+  }
+  document.getElementById('zoomIn').onclick=function(){ zoom=Math.min(2.2, Math.round((zoom+0.1)*10)/10); applyZoom(); };
+  document.getElementById('zoomOut').onclick=function(){ zoom=Math.max(0.6, Math.round((zoom-0.1)*10)/10); applyZoom(); };
+  applyZoom();
 
   /* ---- protect storage from being auto-cleared, and enable backups ---- */
   (function(){
