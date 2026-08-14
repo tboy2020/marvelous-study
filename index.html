@@ -640,7 +640,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     return '✍️';
   }
   function preview(text){ var s=cleanSpeech(text).replace(/\s+/g,' ').trim(); return s.length>90 ? s.slice(0,90).trim()+'…' : s; }
-  function tsBold(text){ return esc(text).replace(/\[(\d{1,2}:\d{2})\]/g, '<b style="font-weight:800;color:#fff;background:var(--herb);padding:1px 7px;border-radius:6px;display:inline-block;margin:1px 2px;">[$1]</b>'); }
+  function tsBold(text){ return esc(text).replace(/\[(\d{1,2}):(\d{2})\]/g, function(m,mm,ss){ var sec=(parseInt(mm,10)*60)+parseInt(ss,10); return '<b class="ts-chip" data-sec="'+sec+'" style="font-weight:800;color:#fff;background:var(--herb);padding:1px 7px;border-radius:6px;display:inline-block;margin:1px 2px;">['+mm+':'+ss+']</b>'; }); }
 
   function renderNotes(){
     var wrap=document.getElementById('notesList'); wrap.innerHTML='';
@@ -674,6 +674,17 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
         var body=document.createElement('div'); body.className='readtext'; body.style.marginTop='12px'; body.innerHTML=tsBold(n.text);
         card.appendChild(body);
         card.appendChild(makeReadBar(function(){ return displayTitle(n)+'. '+n.text; }));
+        if(n.hasAudio){
+          var aw=document.createElement('div'); aw.style.marginTop='12px';
+          var albl=document.createElement('div'); albl.className='meta'; albl.textContent='🎧 Your recording — tap a green time to jump to that moment';
+          var au=document.createElement('audio'); au.controls=true; au.preload='metadata'; au.style.cssText='width:100%;margin-top:6px;';
+          audioGet(n.id).then(function(blob){ if(blob){ au.src=URL.createObjectURL(blob); } else { albl.textContent='🎧 Recording not found on this device.'; } });
+          var adel=document.createElement('button'); adel.className='btn ghost small'; adel.style.marginTop='6px'; adel.textContent='🗑 Delete audio (keep notes)';
+          adel.onclick=function(){ if(!window.confirm('Delete just the recording audio? Your written notes stay.'))return; audioDel(n.id).then(function(){ n.hasAudio=false; saveNotes(); renderNotes(); }); };
+          aw.appendChild(albl); aw.appendChild(au); aw.appendChild(adel); card.appendChild(aw);
+          var chips=body.querySelectorAll('.ts-chip');
+          for(var ci=0; ci<chips.length; ci++){ (function(chip){ chip.style.cursor='pointer'; chip.title='Tap to hear this part'; chip.onclick=function(){ var sec=parseFloat(chip.getAttribute('data-sec'))||0; try{ au.currentTime=sec; var pr=au.play(); if(pr&&pr.catch)pr.catch(function(){}); }catch(e){} aw.scrollIntoView({behavior:'smooth',block:'nearest'}); }; })(chips[ci]); }
+        }
         var actions=document.createElement('div'); actions.className='row'; actions.style.marginTop='10px';
         var watch=document.createElement('button'); watch.className='btn amber small'; watch.textContent='🎬 Watch & Learn';
         var slides=document.createElement('button'); slides.className='btn amber small'; slides.textContent='🖼 Slides';
@@ -694,7 +705,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
           .then(function(txt){ n.summary=txt; saveNotes(); renderNotes(); })
           .catch(function(e){ toast(e.message||'Could not summarise.'); sum.disabled=false; sum.textContent='✨ Summarise'; });
         };
-        del.onclick=function(){ if(!window.confirm('Delete this note?')) return; notes=notes.filter(function(x){return x.id!==n.id;}); delete expanded[n.id]; saveNotes(); renderNotes(); };
+        del.onclick=function(){ if(!window.confirm('Delete this note?')) return; if(n.hasAudio) audioDel(n.id); notes=notes.filter(function(x){return x.id!==n.id;}); delete expanded[n.id]; saveNotes(); renderNotes(); };
       }
       wrap.appendChild(card);
     })(list[i]); }
@@ -731,11 +742,19 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     box.appendChild(makeReadBar(function(){ return n.summary; }));
     return box;
   }
+  /* ---- audio store (IndexedDB, for saved recordings) ---- */
+  var _adb=null, IDB_OK=(typeof indexedDB!=='undefined');
+  function adb(){ if(_adb) return Promise.resolve(_adb); return new Promise(function(res,rej){ var r=indexedDB.open('studylab',1); r.onupgradeneeded=function(){ if(!r.result.objectStoreNames.contains('audio')) r.result.createObjectStore('audio'); }; r.onsuccess=function(){ _adb=r.result; res(_adb); }; r.onerror=function(){ rej(r.error); }; }); }
+  function audioPut(key, blob){ if(!IDB_OK) return Promise.reject(new Error('no idb')); return adb().then(function(db){ return new Promise(function(res,rej){ var tx=db.transaction('audio','readwrite'); tx.objectStore('audio').put(blob,key); tx.oncomplete=function(){res();}; tx.onerror=function(){rej(tx.error);}; }); }); }
+  function audioGet(key){ if(!IDB_OK) return Promise.resolve(null); return adb().then(function(db){ return new Promise(function(res,rej){ var tx=db.transaction('audio','readonly'); var rq=tx.objectStore('audio').get(key); rq.onsuccess=function(){res(rq.result||null);}; rq.onerror=function(){rej(rq.error);}; }); }).catch(function(){ return null; }); }
+  function audioDel(key){ if(!IDB_OK) return Promise.resolve(); return adb().then(function(db){ return new Promise(function(res){ var tx=db.transaction('audio','readwrite'); tx.objectStore('audio').delete(key); tx.oncomplete=function(){res();}; tx.onerror=function(){res();}; }); }).catch(function(){}); }
+
   function addNote(title, text){
     var t=(title||'').trim();
     if(!t || t==='From a photo' || t==='From a recording'){ var d=deriveTitle(text); if(d) t=d; else if(!t) t='Note'; }
-    notes.unshift({ id:'n'+Date.now(), title:t, text:text||'', summary:'', ts:Date.now() });
-    saveNotes(); renderNotes();
+    var note={ id:'n'+Date.now(), title:t, text:text||'', summary:'', ts:Date.now() };
+    notes.unshift(note); saveNotes(); renderNotes();
+    return note;
   }
   (function(){ var s=document.getElementById('noteSearch'); if(s) s.addEventListener('input', function(){ renderNotes(); }); })();
   document.getElementById('saveNote').onclick=function(){
@@ -871,7 +890,11 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     if(text){
       card.appendChild(makeReadBar(function(){ return text; }));
       var save=document.createElement('button'); save.className='btn primary block'; save.style.marginTop='12px'; save.textContent='Save as a note';
-      save.onclick=function(){ addNote('From a recording', text); toast('Saved to My notes.'); switchTab('notes'); };
+      save.onclick=function(){
+        var note=addNote('From a recording', text);
+        if(recBlob){ note.hasAudio=true; saveNotes(); audioPut(note.id, recBlob).then(function(){ renderNotes(); }).catch(function(){ note.hasAudio=false; saveNotes(); }); }
+        toast('Saved to My notes.'); switchTab('notes');
+      };
       card.appendChild(save);
     }
     var del=document.createElement('button'); del.className='btn ghost block'; del.style.marginTop='8px'; del.textContent='🗑 Delete';
