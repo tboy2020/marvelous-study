@@ -393,10 +393,13 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
 <div id="stix" style="display:none;position:fixed;inset:0;z-index:100;background:#26201f;color:#F7F3E8;flex-direction:column;">
   <div style="display:flex;align-items:center;gap:10px;padding:calc(12px + env(safe-area-inset-top,0)) 16px 12px;">
     <b style="font-family:'Saira Condensed',sans-serif;text-transform:uppercase;letter-spacing:.6px;font-size:20px;">My Stickers</b>
-    <button id="sxExit" style="margin-left:auto;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:20px;width:40px;height:40px;border-radius:10px;cursor:pointer;">✕</button>
+    <button id="sxMode" style="margin-left:auto;background:var(--amber);border:none;color:#3a2c0e;font-family:'Saira Condensed',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.4px;font-size:14px;padding:8px 14px;border-radius:10px;cursor:pointer;">🎨 Free arrange</button>
+    <button id="sxExit" style="background:rgba(255,255,255,.15);border:none;color:#fff;font-size:20px;width:40px;height:40px;border-radius:10px;cursor:pointer;">✕</button>
   </div>
-  <div id="sxBody" style="flex:1;overflow-y:auto;padding:6px 16px calc(24px + env(safe-area-inset-bottom,0));">
+  <div id="sxHint" style="text-align:center;font-size:13px;opacity:.7;padding:0 16px 6px;"></div>
+  <div id="sxBody" style="flex:1;overflow:auto;padding:6px 16px calc(24px + env(safe-area-inset-bottom,0));">
     <div id="sxGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;max-width:820px;margin:0 auto;"></div>
+    <div id="sxBoard" style="display:none;position:relative;width:100%;min-height:1000px;max-width:900px;margin:0 auto;"></div>
   </div>
 </div>
 
@@ -1431,8 +1434,9 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     ['#D6E9FF','#173f66'],['#F3E0FF','#4b2366'],['#FFE0D0','#6b3416'],
     ['#E0FFF7','#0f5548'],['#FFF3C4','#5c4a05']
   ];
+  var sxLesson=null;
   function openStickers(lesson){
-    if(lesson.stickers && lesson.stickers.length){ renderStickers(lesson.stickers); return; }
+    if(lesson.stickers && lesson.stickers.length){ sxLesson=lesson; renderStickers(); return; }
     if(!getKey()){ needKey(); return; }
     var el=document.getElementById('stix'); el.style.display='flex';
     document.getElementById('sxGrid').innerHTML='<p class="empty" style="color:#d8d0c0;">Making your stickers…</p>';
@@ -1446,24 +1450,88 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       var obj=JSON.parse(clean);
       if(!obj.stickers||!obj.stickers.length) throw new Error('empty');
       lesson.stickers=obj.stickers; saveNotes();
-      renderStickers(obj.stickers);
+      sxLesson=lesson; renderStickers();
     }).catch(function(){ toast('Could not make stickers. Try again.'); closeStickers(); });
   }
-  function renderStickers(list){
+  function stickEls(st, idx){
+    var c=STICK_COLORS[idx % STICK_COLORS.length];
+    var card=document.createElement('div'); card.className='stick';
+    card.style.background=c[0]; card.style.color=c[1];
+    var e=document.createElement('div'); e.className='se'; e.textContent=st.emoji||'⭐';
+    var t=document.createElement('div'); t.className='st'; t.textContent=st.text||'';
+    var b=document.createElement('button'); b.textContent='🔊 Hear it'; b.style.color=c[1];
+    b.onclick=function(ev){ ev.stopPropagation(); stopSpeak(); rd.owner=null; speak(st.text||''); };
+    card.appendChild(e); card.appendChild(t); card.appendChild(b);
+    return card;
+  }
+  function renderStickers(){
     var el=document.getElementById('stix'); el.style.display='flex';
+    var list=sxLesson.stickers, free=!!sxLesson.stickFree;
+    var grid=document.getElementById('sxGrid'), board=document.getElementById('sxBoard');
+    document.getElementById('sxMode').textContent = free ? '▦ Tidy grid' : '🎨 Free arrange';
+    document.getElementById('sxHint').textContent = free ? 'Drag stickers anywhere. Tap Hear it to listen.' : 'Long-press and drag to reorder. Tap Hear it to listen.';
+    grid.style.display = free ? 'none' : 'grid';
+    board.style.display = free ? 'block' : 'none';
+    if(free){ renderBoard(list); } else { renderGrid(list); }
+  }
+  /* GRID with drag-to-reorder */
+  function renderGrid(list){
     var grid=document.getElementById('sxGrid'); grid.innerHTML='';
     for(var i=0;i<list.length;i++){ (function(st,idx){
-      var c=STICK_COLORS[idx % STICK_COLORS.length];
-      var card=document.createElement('div'); card.className='stick';
-      card.style.background=c[0]; card.style.color=c[1]; card.style.animationDelay=(idx*0.06)+'s';
-      var e=document.createElement('div'); e.className='se'; e.textContent=st.emoji||'⭐';
-      var t=document.createElement('div'); t.className='st'; t.textContent=st.text||'';
-      var b=document.createElement('button'); b.textContent='🔊 Hear it'; b.style.color=c[1];
-      b.onclick=function(){ stopSpeak(); rd.owner=null; speak(st.text||''); };
-      card.appendChild(e); card.appendChild(t); card.appendChild(b);
+      var card=stickEls(st, idx); card.style.animationDelay=(idx*0.05)+'s'; card.setAttribute('draggable','true'); card.style.cursor='grab';
+      card.addEventListener('dragstart', function(e){ sxDrag=idx; card.style.opacity='.4'; try{e.dataTransfer.setData('text','x');}catch(err){} });
+      card.addEventListener('dragend', function(){ card.style.opacity='1'; });
+      card.addEventListener('dragover', function(e){ e.preventDefault(); });
+      card.addEventListener('drop', function(e){ e.preventDefault(); if(sxDrag===null||sxDrag===idx) return; var m=list.splice(sxDrag,1)[0]; list.splice(idx,0,m); sxDrag=null; saveNotes(); renderGrid(list); });
+      // touch reorder
+      addTouchReorder(card, idx, list);
       grid.appendChild(card);
     })(list[i], i); }
   }
+  var sxDrag=null;
+  function addTouchReorder(card, idx, list){
+    var t0=null, longTimer=null, dragging=false;
+    card.addEventListener('touchstart', function(e){
+      t0=e.touches[0]; dragging=false;
+      longTimer=setTimeout(function(){ dragging=true; card.style.opacity='.6'; card.style.transform='scale(1.05)'; }, 300);
+    }, {passive:true});
+    card.addEventListener('touchmove', function(e){
+      if(!dragging){ if(longTimer){clearTimeout(longTimer);longTimer=null;} return; }
+      e.preventDefault();
+      var p=e.touches[0], under=document.elementFromPoint(p.clientX,p.clientY);
+      var host=under&&under.closest?under.closest('.stick'):null;
+      if(host && host!==card && host.parentNode===card.parentNode){
+        var kids=[].slice.call(card.parentNode.children), from=kids.indexOf(card), to=kids.indexOf(host);
+        if(from>=0&&to>=0){ var m=list.splice(idx,1)[0]; list.splice(to,0,m); saveNotes(); renderGrid(list); }
+      }
+    }, {passive:false});
+    card.addEventListener('touchend', function(){ if(longTimer)clearTimeout(longTimer); card.style.opacity='1'; card.style.transform=''; dragging=false; }, {passive:true});
+  }
+  /* FREE scatter board */
+  function renderBoard(list){
+    var board=document.getElementById('sxBoard'); board.innerHTML='';
+    for(var i=0;i<list.length;i++){ (function(st,idx){
+      var card=stickEls(st, idx);
+      card.style.position='absolute'; card.style.width='210px'; card.style.touchAction='none'; card.style.cursor='grab';
+      var pos=st.pos || { x:(idx%3)*230+10, y:Math.floor(idx/3)*150+10 };
+      card.style.left=pos.x+'px'; card.style.top=pos.y+'px'; st.pos=pos;
+      makeDraggable(card, st);
+      board.appendChild(card);
+    })(list[i], i); }
+  }
+  function makeDraggable(card, st){
+    var sx,sy,ox,oy,moved,active=false;
+    function down(cx,cy){ active=true; moved=false; sx=cx; sy=cy; ox=parseFloat(card.style.left)||0; oy=parseFloat(card.style.top)||0; card.style.cursor='grabbing'; card.style.zIndex=50; }
+    function move(cx,cy){ if(!active) return; var dx=cx-sx, dy=cy-sy; if(Math.abs(dx)+Math.abs(dy)>4) moved=true; card.style.left=Math.max(0,ox+dx)+'px'; card.style.top=Math.max(0,oy+dy)+'px'; }
+    function up(){ if(!active) return; active=false; card.style.cursor='grab'; card.style.zIndex=''; if(moved){ st.pos={x:parseFloat(card.style.left)||0, y:parseFloat(card.style.top)||0}; saveNotes(); } }
+    card.addEventListener('mousedown', function(e){ down(e.clientX,e.clientY); });
+    window.addEventListener('mousemove', function(e){ move(e.clientX,e.clientY); });
+    window.addEventListener('mouseup', up);
+    card.addEventListener('touchstart', function(e){ down(e.touches[0].clientX,e.touches[0].clientY); }, {passive:true});
+    card.addEventListener('touchmove', function(e){ if(active){ e.preventDefault(); move(e.touches[0].clientX,e.touches[0].clientY); } }, {passive:false});
+    card.addEventListener('touchend', up, {passive:true});
+  }
+  document.getElementById('sxMode').onclick=function(){ if(!sxLesson) return; sxLesson.stickFree=!sxLesson.stickFree; saveNotes(); renderStickers(); };
   function closeStickers(){ stopSpeak(); document.getElementById('stix').style.display='none'; }
   document.getElementById('sxExit').onclick=closeStickers;
 
