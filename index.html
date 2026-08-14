@@ -640,6 +640,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     return '✍️';
   }
   function preview(text){ var s=cleanSpeech(text).replace(/\s+/g,' ').trim(); return s.length>90 ? s.slice(0,90).trim()+'…' : s; }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function tsBold(text){ return esc(text).replace(/\[(\d{1,2}):(\d{2})\]/g, function(m,mm,ss){ var sec=(parseInt(mm,10)*60)+parseInt(ss,10); return '<b class="ts-chip" data-sec="'+sec+'" style="font-weight:800;color:#fff;background:var(--herb);padding:1px 7px;border-radius:6px;display:inline-block;margin:1px 2px;">['+mm+':'+ss+']</b>'; }); }
 
   function renderNotes(){
