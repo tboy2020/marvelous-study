@@ -145,6 +145,14 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   </div>
 </nav>
 
+<div id="backupBanner" style="display:none;background:#FFF3CE;color:#4a3a08;padding:11px 16px;text-align:center;border-bottom:2px solid var(--amber);">
+  <span id="backupBannerMsg" style="font-size:14.5px;">It's a good time to back up her notes.</span>
+  <span style="display:inline-flex;gap:8px;margin-left:8px;vertical-align:middle;">
+    <button id="backupNow" class="btn amber small">⬇ Back up now</button>
+    <button id="backupLater" class="btn ghost small">Later</button>
+  </span>
+</div>
+
 <main>
   <!-- NOTES -->
   <section class="panel active" id="p-notes">
@@ -266,7 +274,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
         <input type="file" id="restoreInput" accept="application/json,.json" style="display:none;">
         <button class="btn amber" id="restoreBtn">⬆ Restore from a backup</button>
       </div>
-      <p class="hint" style="margin-top:8px;">(The written notes and summaries are saved. Raw recording audio is too large to include — but the timestamped transcripts are.)</p>
+      <p class="hint" style="margin-top:8px;">(The written notes and summaries are saved. Raw recording audio is too large to include — but the timestamped transcripts are.) <b id="lastBackupInfo"></b></p>
     </div>
 
     <div class="card">
@@ -910,6 +918,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
         var note=addNote('From a recording', text);
         if(recBlob){ note.hasAudio=true; saveNotes(); audioPut(note.id, recBlob).then(function(){ renderNotes(); }).catch(function(){ note.hasAudio=false; saveNotes(); }); }
         toast('Saved to My notes.'); switchTab('notes');
+        showBackupBanner('You added a recording — save a backup so it\u2019s never lost.');
       };
       card.appendChild(save);
     }
@@ -1618,8 +1627,20 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     var blob=new Blob([JSON.stringify(dump)], {type:'application/json'});
     var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
     a.download='studylab-backup-'+new Date().toISOString().slice(0,10)+'.json'; document.body.appendChild(a); a.click(); a.remove();
+    localStorage.setItem('sl_lastBackup', String(Date.now()));
+    hideBackupBanner(); updateBackupInfo();
     toast('Backup saved. Keep it safe (email it to yourself).');
   }
+  function lastBackup(){ return parseInt(localStorage.getItem('sl_lastBackup')||'0',10); }
+  function bkSnooze(){ return parseInt(localStorage.getItem('sl_bkSnooze')||'0',10); }
+  function agoText(ts){ if(!ts) return 'never'; var s=Math.floor((Date.now()-ts)/1000); if(s<60) return 'just now'; var m=Math.floor(s/60); if(m<60) return m+' min ago'; var h=Math.floor(m/60); if(h<24) return h+' hr ago'; var d=Math.floor(h/24); return d+' day'+(d>1?'s':'')+' ago'; }
+  function updateBackupInfo(){ var el=document.getElementById('lastBackupInfo'); if(el) el.textContent='Last backup: '+agoText(lastBackup()); }
+  function showBackupBanner(msg){ var b=document.getElementById('backupBanner'); if(!b) return; document.getElementById('backupBannerMsg').textContent=msg||'It\u2019s a good time to back up her notes.'; b.style.display='block'; }
+  function hideBackupBanner(){ var b=document.getElementById('backupBanner'); if(b) b.style.display='none'; }
+  function maybeRemindBackup(){ if(!notes.length) return; if(Date.now() < bkSnooze()) return; if((Date.now()-lastBackup()) > 24*3600*1000){ showBackupBanner('Remember to back up her notes — one tap keeps them safe.'); } }
+  document.getElementById('backupNow').onclick=function(){ backupData(); };
+  document.getElementById('backupLater').onclick=function(){ localStorage.setItem('sl_bkSnooze', String(Date.now()+6*3600*1000)); hideBackupBanner(); };
+  updateBackupInfo(); maybeRemindBackup();
   document.getElementById('backupBtn').onclick=backupData;
   document.getElementById('restoreBtn').onclick=function(){ document.getElementById('restoreInput').click(); };
   document.getElementById('restoreInput').onchange=function(){
