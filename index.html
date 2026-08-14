@@ -1138,7 +1138,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   var wl={ slides:[], concepts:[], i:0, paused:false, playing:false, lesson:null };
   function buildScript(lesson){
     var content=(lesson.title?lesson.title+'\n\n':'')+lesson.text+(lesson.summary?('\n\nSummary:\n'+lesson.summary):'');
-    var sys='You turn a lesson into a simple picture-lesson for a 16-year-old with dyslexia. Break it into 5 to 8 short steps. Return ONLY valid JSON, no markdown, in this shape: {"slides":[{"line":"very short on-screen text, max 8 words","image":"a short real-life video search phrase, 2 to 4 words, showing an everyday action or scene such as chef stirring pot, washing hands, closing fridge","say":"2 to 4 short simple sentences that explain this step and give a real-life example"}],"concepts":["three short main ideas to check at the end"]}. Keep language plain and kind.';
+    var sys='You turn a lesson into a simple picture-lesson for a 16-year-old with dyslexia studying Hospitality and Catering. Break it into 5 to 8 short steps. Return ONLY valid JSON, no markdown, in this shape: {"slides":[{"line":"very short on-screen text, max 8 words","image":"a SPECIFIC, literal video search phrase, 3 to 5 words, that clearly SHOWS this exact point using a real kitchen or food scene or action (for example: chef washing hands sink, raw chicken chopping board, fridge thermometer close up, steaming cooked rice pan). Make it directly relevant to the point, not generic.","say":"2 to 4 short simple sentences that explain this step and give a real-life example"}],"concepts":["three short main ideas to check at the end"]}. Keep language plain and kind. Every image phrase must match its point closely.';
     return claude({ system:sys, messages:[{role:'user', content:'Make a picture-lesson from this:\n\n'+content}], max_tokens:1600, model:currentModel() })
       .then(function(txt){
         var clean=txt.replace(/```json/gi,'').replace(/```/g,'').trim();
@@ -1450,12 +1450,23 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     var wrap=document.getElementById('dkImgWrap'), credit=document.getElementById('dkCredit');
     wrap.innerHTML='<div class="wl-emoji">'+emojiFor(s.image)+'</div>'; credit.textContent='';
     var mine=dk.i;
-    fetchPhoto(s.image).then(function(p){
-      if(p && dk.i===mine && document.getElementById('deck').style.display!=='none'){
-        wrap.innerHTML='<img src="'+p.url+'" style="width:100%;height:100%;object-fit:cover;" alt="">';
-        credit.textContent=p.credit;
-      }
-    });
+    var stillHere=function(){ return dk.i===mine && document.getElementById('deck').style.display!=='none'; };
+    function deckPhoto(){
+      fetchPhoto(s.image).then(function(p){
+        if(p && stillHere()){ var img=new Image(); img.onload=function(){ if(!stillHere())return; img.className='wl-kb'; img.style.animation='kbC 14s ease-in-out infinite alternate'; wrap.innerHTML=''; wrap.appendChild(img); credit.textContent=p.credit; }; img.src=p.url; }
+      });
+    }
+    if(getPexels()){
+      fetchClip(s.image).then(function(clip){
+        if(clip && stillHere()){
+          var vid=document.createElement('video'); vid.src=clip.url; vid.muted=true; vid.loop=true; vid.autoplay=true;
+          vid.setAttribute('playsinline',''); vid.setAttribute('webkit-playsinline','');
+          vid.style.cssText='width:100%;height:100%;object-fit:cover;';
+          vid.onerror=function(){ if(stillHere()) deckPhoto(); };
+          wrap.innerHTML=''; wrap.appendChild(vid); var pr=vid.play(); if(pr&&pr.catch) pr.catch(function(){}); credit.textContent=clip.credit;
+        } else if(stillHere()){ deckPhoto(); }
+      });
+    } else { deckPhoto(); }
     document.getElementById('dkNext').textContent = (dk.i>=dk.slides.length-1)?'Finish ✓':'Next ›';
   }
   function setDkPlay(){ var b=document.getElementById('dkAuto'); if(b) b.textContent = dk.auto ? '⏸ Pause' : '▶ Play'; }
