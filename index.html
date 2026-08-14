@@ -383,7 +383,8 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   <div style="padding:12px 16px calc(16px + env(safe-area-inset-bottom,0));background:rgba(0,0,0,.2);">
     <div style="display:flex;gap:10px;max-width:640px;margin:0 auto;">
       <button id="dkPrev" class="btn ghost" style="flex:1;">‹ Back</button>
-      <button id="dkNext" class="btn amber" style="flex:2;">Next ›</button>
+      <button id="dkAuto" class="btn amber" style="flex:1.4;">▶ Play</button>
+      <button id="dkNext" class="btn ghost" style="flex:1;">Next ›</button>
     </div>
   </div>
 </div>
@@ -1350,7 +1351,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   };
 
   /* ---------- SLIDES (she flips them herself) ---------- */
-  var dk={slides:[], i:0};
+  var dk={slides:[], i:0, auto:false};
   function ensureScript(lesson){
     if(lesson.script && lesson.script.slides) return Promise.resolve(lesson.script);
     return buildScript(lesson).then(function(obj){ lesson.script=obj; saveNotes(); return obj; });
@@ -1360,7 +1361,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     var el=document.getElementById('deck'); el.style.display='flex';
     document.getElementById('dkLine').textContent='Making your slides…';
     document.getElementById('dkSay').textContent=''; document.getElementById('dkImgWrap').innerHTML='🖼️'; document.getElementById('dkCredit').textContent=''; document.getElementById('dkCount').textContent='';
-    ensureScript(lesson).then(function(obj){ dk.slides=obj.slides; dk.i=0; renderDeck(); })
+    ensureScript(lesson).then(function(obj){ dk.slides=obj.slides; dk.i=0; dk.auto=false; renderDeck(); setDkPlay(); })
       .catch(function(){ toast('Could not build slides. Try again.'); closeDeck(); });
   }
   function renderDeck(){
@@ -1380,18 +1381,45 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     });
     document.getElementById('dkNext').textContent = (dk.i>=dk.slides.length-1)?'Finish ✓':'Next ›';
   }
-  function closeDeck(){ stopSpeak(); document.getElementById('deck').style.display='none'; }
+  function setDkPlay(){ var b=document.getElementById('dkAuto'); if(b) b.textContent = dk.auto ? '⏸ Pause' : '▶ Play'; }
+  function deckStop(){ dk.auto=false; setDkPlay(); stopSpeak(); }
+  function deckSpeak(text, onDone){
+    var chunks=splitSentences(text); var idx=0;
+    function nxt(){
+      if(!dk.auto) return;
+      if(idx>=chunks.length){ if(onDone) onDone(); return; }
+      var u=new SpeechSynthesisUtterance(chunks[idx]); if(voice)u.voice=voice; u.lang='en-GB'; u.rate=settings.rate;
+      u.onend=function(){ if(dk.auto){ idx++; setTimeout(nxt, gap()); } };
+      u.onerror=function(){ if(dk.auto){ idx++; setTimeout(nxt, gap()); } };
+      try{ synth.cancel(); synth.speak(u); }catch(e){}
+    }
+    nxt();
+  }
+  function deckPlay(){
+    dk.auto=true; setDkPlay();
+    var page=dk.slides[dk.i]; if(!page){ deckStop(); return; }
+    deckSpeak((page.line||'')+'. '+(page.say||''), function(){
+      if(!dk.auto) return;
+      setTimeout(function(){
+        if(!dk.auto) return;
+        if(dk.i>=dk.slides.length-1){ deckStop(); return; }
+        dk.i++; renderDeck(); deckPlay();
+      }, 650);
+    });
+  }
+  function closeDeck(){ dk.auto=false; stopSpeak(); document.getElementById('deck').style.display='none'; }
   document.getElementById('dkExit').onclick=closeDeck;
-  document.getElementById('dkNext').onclick=function(){ stopSpeak(); if(dk.i>=dk.slides.length-1){ closeDeck(); return; } dk.i++; renderDeck(); };
-  document.getElementById('dkPrev').onclick=function(){ stopSpeak(); dk.i=Math.max(0,dk.i-1); renderDeck(); };
-  document.getElementById('dkRead').onclick=function(){ var s=dk.slides[dk.i]; if(!s) return; stopSpeak(); rd.owner=null; speak((s.line||'')+'. '+(s.say||'')); };
+  document.getElementById('dkAuto').onclick=function(){ if(dk.auto){ deckStop(); } else { deckPlay(); } };
+  document.getElementById('dkNext').onclick=function(){ deckStop(); if(dk.i>=dk.slides.length-1){ closeDeck(); return; } dk.i++; renderDeck(); };
+  document.getElementById('dkPrev').onclick=function(){ deckStop(); dk.i=Math.max(0,dk.i-1); renderDeck(); };
+  document.getElementById('dkRead').onclick=function(){ var s=dk.slides[dk.i]; if(!s) return; deckStop(); rd.owner=null; speak((s.line||'')+'. '+(s.say||'')); };
   (function(){ // swipe to flip
     var x0=null, body=document.getElementById('dkBody');
     body.addEventListener('touchstart', function(e){ x0=e.touches[0].clientX; }, {passive:true});
     body.addEventListener('touchend', function(e){
       if(x0===null) return; var dx=e.changedTouches[0].clientX-x0; x0=null;
       if(Math.abs(dx)<50) return;
-      stopSpeak();
+      deckStop();
       if(dx<0){ if(dk.i<dk.slides.length-1){ dk.i++; renderDeck(); } }
       else { dk.i=Math.max(0,dk.i-1); renderDeck(); }
     }, {passive:true});
