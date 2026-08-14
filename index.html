@@ -208,6 +208,8 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     <div class="card">
       <div class="row">
         <button class="btn tomato" id="recBtn">● Start recording</button>
+        <button class="btn amber" id="recPause" style="display:none;">⏸ Pause</button>
+        <span id="recTimer" style="display:none;font-family:'Saira Condensed',sans-serif;font-weight:700;font-size:20px;color:var(--herb);align-self:center;">0:00</span>
       </div>
       <div id="recStatus" class="hint"></div>
       <div id="recPlayer" style="margin-top:12px;"></div>
@@ -961,13 +963,31 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   /* ---------- RECORD + WHISPER ---------- */
   var mediaRecorder=null, recChunks=[], recBlob=null, recording=false;
   var recBtn=document.getElementById('recBtn');
+  var recPauseBtn=document.getElementById('recPause');
+  var recTimerEl=document.getElementById('recTimer');
+  var recSecs=0, recTick=null, recPaused=false;
+  function recFmt(s){ var m=Math.floor(s/60); return m+':'+((s%60)<10?'0':'')+(s%60); }
+  function recTimerStart(){ if(recTick) clearInterval(recTick); recTick=setInterval(function(){ if(!recPaused){ recSecs++; recTimerEl.textContent=recFmt(recSecs); } }, 1000); }
+  function recTimerStop(){ if(recTick){ clearInterval(recTick); recTick=null; } }
   recBtn.onclick=function(){
     if(!recording){ startRec(); } else { stopRec(); }
+  };
+  recPauseBtn.onclick=function(){
+    if(!mediaRecorder || !recording) return;
+    if(!recPaused){
+      try{ mediaRecorder.pause(); }catch(e){}
+      recPaused=true; recPauseBtn.textContent='▶ Continue'; recPauseBtn.classList.remove('amber'); recPauseBtn.classList.add('primary');
+      document.getElementById('recStatus').textContent='Paused — tap Continue when the class carries on.';
+    } else {
+      try{ mediaRecorder.resume(); }catch(e){}
+      recPaused=false; recPauseBtn.textContent='⏸ Pause'; recPauseBtn.classList.remove('primary'); recPauseBtn.classList.add('amber');
+      document.getElementById('recStatus').textContent='Recording… speak clearly.';
+    }
   };
   function startRec(){
     if(!navigator.mediaDevices||!window.MediaRecorder){ toast('This browser cannot record audio.'); return; }
     navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
-      recChunks=[];
+      recChunks=[]; recSecs=0; recPaused=false; recTimerEl.textContent='0:00';
       try{ mediaRecorder=new MediaRecorder(stream); }catch(e){ mediaRecorder=new MediaRecorder(stream,{mimeType:'audio/mp4'}); }
       mediaRecorder.ondataavailable=function(e){ if(e.data&&e.data.size) recChunks.push(e.data); };
       mediaRecorder.onstop=function(){
@@ -977,10 +997,12 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       };
       mediaRecorder.start();
       recording=true; recBtn.textContent='■ Stop recording'; recBtn.classList.remove('tomato'); recBtn.classList.add('primary');
-      document.getElementById('recStatus').textContent='Recording… speak clearly.';
+      recPauseBtn.style.display=''; recPauseBtn.textContent='⏸ Pause'; recPauseBtn.classList.remove('primary'); recPauseBtn.classList.add('amber');
+      recTimerEl.style.display=''; recTimerStart();
+      document.getElementById('recStatus').textContent='Recording… speak clearly. You can pause anytime.';
     }).catch(function(){ toast('Microphone permission was not given.'); });
   }
-  function stopRec(){ if(mediaRecorder&&recording){ mediaRecorder.stop(); recording=false; recBtn.textContent='● Start recording'; recBtn.classList.add('tomato'); recBtn.classList.remove('primary'); document.getElementById('recStatus').textContent='Recorded. Listen back, or turn it into notes.'; } }
+  function stopRec(){ if(mediaRecorder&&recording){ try{ mediaRecorder.stop(); }catch(e){} recording=false; recPaused=false; recTimerStop(); recBtn.textContent='● Start recording'; recBtn.classList.add('tomato'); recBtn.classList.remove('primary'); recPauseBtn.style.display='none'; recTimerEl.style.display='none'; document.getElementById('recStatus').textContent='Recorded '+recFmt(recSecs)+'. Listen back, or turn it into notes.'; } }
   function showPlayer(){
     var wrap=document.getElementById('recPlayer'); wrap.innerHTML='';
     var audio=document.createElement('audio'); audio.controls=true; audio.style.width='100%'; audio.src=URL.createObjectURL(recBlob);
