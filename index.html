@@ -816,18 +816,31 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   }
   function editCard(n){
     var card=document.createElement('div'); card.className='card note-item';
+    function micRow(input, label){
+      var wrap=document.createElement('div'); wrap.style.cssText='display:flex;gap:8px;align-items:stretch;';
+      input.style.flex='1';
+      var mic=document.createElement('button'); mic.className='btn tomato'; mic.setAttribute('data-label','🎤'); mic.textContent='🎤'; mic.title='Talk '+(label||''); mic.style.cssText='flex:0 0 auto;padding:0 14px;';
+      wrap.appendChild(input); wrap.appendChild(mic);
+      return { wrap:wrap, mic:mic };
+    }
     var l1=document.createElement('label'); l1.className='k'; l1.textContent='Title'; l1.style.marginTop='0';
     var ti=document.createElement('input'); ti.type='text'; ti.value=displayTitle(n); ti.placeholder='Title';
+    var tiRow=micRow(ti,'the title');
     var lh=document.createElement('label'); lh.className='k'; lh.textContent='Heading — group (optional)';
     var hi=document.createElement('input'); hi.type='text'; hi.value=n.heading||''; hi.setAttribute('list','headingList'); hi.placeholder='e.g. Food Safety';
+    var hiRow=micRow(hi,'the heading');
     var l2=document.createElement('label'); l2.className='k'; l2.textContent='Note';
     var ta=document.createElement('textarea'); ta.value=n.text||'';
-    var hint=document.createElement('p'); hint.className='hint'; hint.innerHTML='Tip: tap the <b>keyboard microphone</b> to add more by talking.';
+    var estat=document.createElement('span'); estat.className='hint';
+    var taRow=document.createElement('div'); taRow.className='row'; taRow.style.marginTop='8px';
+    var taMic=document.createElement('button'); taMic.className='btn tomato'; taMic.setAttribute('data-label','🎤 Talk'); taMic.textContent='🎤 Talk';
+    taRow.appendChild(taMic); taRow.appendChild(estat);
     var row=document.createElement('div'); row.className='row'; row.style.marginTop='12px';
     var save=document.createElement('button'); save.className='btn primary'; save.textContent='Save changes';
     var cancel=document.createElement('button'); cancel.className='btn ghost'; cancel.textContent='Cancel';
     row.appendChild(save); row.appendChild(cancel);
-    card.appendChild(l1); card.appendChild(ti); card.appendChild(lh); card.appendChild(hi); card.appendChild(l2); card.appendChild(ta); card.appendChild(hint); card.appendChild(row);
+    card.appendChild(l1); card.appendChild(tiRow.wrap); card.appendChild(lh); card.appendChild(hiRow.wrap); card.appendChild(l2); card.appendChild(ta); card.appendChild(taRow); card.appendChild(row);
+    wireTalk(tiRow.mic, ti, estat); wireTalk(hiRow.mic, hi, estat); wireTalk(taMic, ta, estat);
     save.onclick=function(){
       var newText=ta.value.trim();
       if(!newText){ toast('The note cannot be empty.'); return; }
