@@ -1156,8 +1156,8 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       if(m.role==='assistant' && (typeof m.content==='string') && m.content!=='…'){
         d.appendChild(makeReadBar(function(){ return m.content; }));
         var bar=document.createElement('div'); bar.className='row'; bar.style.marginTop='6px';
-        var redo=document.createElement('button'); redo.className='btn ghost small'; redo.textContent = (askMode==='full') ? '🌱 Simplify this' : '📖 More detail';
-        redo.onclick=function(){ var want=(askMode==='full')?'simple':'full'; reExplain(m, want, redo); };
+        var redo=document.createElement('button'); redo.className='btn ghost small'; redo.textContent = (m.mode==='full') ? '🌱 Simplify this' : '📖 More detail';
+        redo.onclick=function(){ var want=(m.mode==='full')?'simple':'full'; reExplain(m, want, redo); };
         var sv=document.createElement('button'); sv.className='btn ghost small'; sv.textContent='＋ Save to notes';
         sv.onclick=function(){ openSaveModal({ text: m.content, onSaved: function(){} }); };
         bar.appendChild(redo); bar.appendChild(sv); d.appendChild(bar);
@@ -1191,6 +1191,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       askChunks=[]; try{ askRec=new MediaRecorder(stream); }catch(e){ askRec=new MediaRecorder(stream,{mimeType:'audio/mp4'}); }
       askRec.ondataavailable=function(e){ if(e.data&&e.data.size) askChunks.push(e.data); };
       askRec.onstop=function(){
+        askRecording=false; btn.textContent='🎤 Talk';
         var blob=new Blob(askChunks,{type:(askRec.mimeType||'audio/webm')}); stream.getTracks().forEach(function(t){t.stop();});
         st.textContent='Turning your words into text…';
         if(getGroq()){
@@ -1207,8 +1208,6 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       };
       askRec.start(); askRecording=true; btn.textContent='■ Stop'; st.textContent='Listening… tap Stop when done.';
     }).catch(function(){ toast('Microphone permission not given.'); });
-    // reset flag when stopped
-    var iv=setInterval(function(){ if(askRec && askRec.state==='inactive'){ askRecording=false; document.getElementById('askRec').textContent='🎤 Talk'; clearInterval(iv); } }, 400);
   };
   document.getElementById('askSend').onclick=function(){
     if(!getKey()){ needKey(); return; }
@@ -1226,7 +1225,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       var thinking={role:'assistant', content:'…', display:'…'}; chat.push(thinking); renderChat();
       var apiMsgs = chat.filter(function(m){return m!==thinking;}).map(function(m){ return { role:m.role, content:m.content }; });
       return claude({ system:tutorPrompt(), messages:apiMsgs, max_tokens:(askMode==='full'?1500:1000) }).then(function(ans){
-        chat.pop(); chat.push({role:'assistant', content:ans, display:ans}); renderChat();
+        chat.pop(); chat.push({role:'assistant', content:ans, display:ans, mode:askMode}); renderChat();
       });
     }).catch(function(e){
       if(chat.length && chat[chat.length-1].content==='…') chat.pop();
@@ -1241,7 +1240,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       ? 'Please explain this again, but much simpler: short sentences, one idea at a time, everyday examples, fairly short. Same information, easier words.'
       : 'Please explain this again with more detail and depth: use the proper terms and explain them, add more examples, and cover it more fully. Keep it clear and readable.';
     claude({ system:tutorPrompt(want), messages:[{role:'user', content:ask+'\n\nHere is what to re-explain:\n\n'+base}], max_tokens:(want==='full'?1500:1000) })
-    .then(function(ans){ chat.push({role:'assistant', content:ans, display:ans}); renderChat(); })
+    .then(function(ans){ m.content=ans; m.display=ans; m.mode=want; renderChat(); })
     .catch(function(e){ toast(e.message||'Could not redo it.'); if(btn){ btn.disabled=false; } });
   }
 
