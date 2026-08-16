@@ -264,6 +264,8 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       <p class="hint">Photo, PDF, or Word document (.docx) all work. A clear photo reads most reliably.</p>
     </div>
     <div id="cwResult"></div>
+    <div style="font-family:'Saira Condensed',sans-serif;text-transform:uppercase;letter-spacing:1px;font-size:16px;color:var(--herb);font-weight:700;margin:22px 0 4px;border-bottom:2px solid #e7ddc9;padding-bottom:4px;">Your saved coursework</div>
+    <div id="cwList"></div>
   </section>
 
   <!-- VIDEOS -->
@@ -447,8 +449,8 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
 <!-- SAVE-TO-NOTES modal -->
 <div id="saveModal" style="display:none;position:fixed;inset:0;z-index:150;background:rgba(20,16,15,.55);align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px 14px;">
   <div style="background:var(--cream,#F7F1E3);color:var(--ink,#2b2622);width:100%;max-width:640px;border-radius:18px;padding:20px 20px 22px;box-shadow:0 12px 40px rgba(0,0,0,.35);">
-    <div style="font-family:'Saira Condensed',sans-serif;text-transform:uppercase;letter-spacing:.6px;font-size:22px;color:var(--herb);">Save to my notes</div>
-    <p class="hint" style="margin-top:2px;">Check it, fix anything in your own words, give it a name and a group, then save.</p>
+    <div id="smModalTitle" style="font-family:'Saira Condensed',sans-serif;text-transform:uppercase;letter-spacing:.6px;font-size:22px;color:var(--herb);">Save to my notes</div>
+    <p class="hint" id="smHint" style="margin-top:2px;">Check it, fix anything in your own words, give it a name and a group, then save.</p>
     <label class="k">Title</label>
     <div style="display:flex;gap:8px;align-items:stretch;">
       <input type="text" id="smTitle" placeholder="Name this note" style="flex:1;">
@@ -459,7 +461,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
       <input type="text" id="smHeading" list="headingList" placeholder="e.g. Food Safety" style="flex:1;">
       <button class="btn tomato" id="smTalkHeading" data-label="🎤" style="flex:0 0 auto;padding:0 14px;">🎤</button>
     </div>
-    <label class="k">The note — you can edit it</label>
+    <label class="k" id="smTextLabel">The note — you can edit it</label>
     <textarea id="smText" style="min-height:200px;"></textarea>
     <div class="row" style="margin-top:8px;">
       <button class="btn tomato" id="smTalkText" data-label="🎤 Talk">🎤 Talk</button>
@@ -906,25 +908,32 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     return note;
   }
 
-  /* shared Save-to-notes panel (edit + title + heading), used everywhere */
-  var _smDone=null;
+  /* shared Save panel (edit + title + heading), used for notes and coursework */
+  var _smDone=null, _smCustom=null;
   function openSaveModal(opts){
     opts=opts||{};
+    var box=document.getElementById('saveModal');
+    document.getElementById('smModalTitle').textContent = opts.modalTitle || 'Save to my notes';
+    var hintEl=document.getElementById('smHint'); if(hintEl) hintEl.textContent = opts.modalHint || 'Check it, fix anything in your own words, give it a name and a group, then save.';
     document.getElementById('smTitle').value = opts.title || deriveTitle(opts.text||'') || '';
     document.getElementById('smHeading').value = opts.heading || '';
     document.getElementById('smText').value = opts.text || '';
     document.getElementById('smTalkStatus').textContent='';
+    document.getElementById('smTextLabel').textContent = opts.textLabel || 'The note — you can edit it';
     refreshHeadingDatalist();
-    _smDone = opts.onSaved || null;
-    document.getElementById('saveModal').style.display='flex';
+    _smDone = opts.onSaved || null; _smCustom = opts.customSave || null;
+    box.style.display='flex';
     setTimeout(function(){ try{ document.getElementById('smTitle').focus(); }catch(e){} }, 40);
   }
-  function closeSaveModal(){ document.getElementById('saveModal').style.display='none'; _smDone=null; }
+  function closeSaveModal(){ document.getElementById('saveModal').style.display='none'; _smDone=null; _smCustom=null; }
   document.getElementById('smCancel').onclick=closeSaveModal;
   document.getElementById('smSave').onclick=function(){
     var text=document.getElementById('smText').value.trim();
     if(!text){ toast('There is nothing to save.'); return; }
-    var note=addNote(document.getElementById('smTitle').value.trim() || 'Note', text, document.getElementById('smHeading').value.trim());
+    var title=document.getElementById('smTitle').value.trim() || 'Note';
+    var heading=document.getElementById('smHeading').value.trim();
+    if(_smCustom){ var cs=_smCustom; closeSaveModal(); cs({title:title, heading:heading, text:text}); return; }
+    var note=addNote(title, text, heading);
     var cb=_smDone; closeSaveModal();
     toast('Saved to My notes.');
     if(cb) cb(note); else switchTab('notes');
@@ -1536,10 +1545,31 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
 
   /* ---------- COURSEWORK helper (understand / check own work — never writes it) ---------- */
   var cwMode='understand';
+  var coursework = load('sl_coursework', []);
+  var cwExpanded = {};
+  function saveCoursework(){ save('sl_coursework', coursework); }
   document.getElementById('cwMode').addEventListener('click', function(e){ if(!e.target.classList.contains('opt'))return; var k=this.querySelectorAll('.opt'); for(var i=0;i<k.length;i++) k[i].classList.remove('sel'); e.target.classList.add('sel'); cwMode=e.target.getAttribute('data-val'); });
   var cwInput=document.getElementById('cwInput');
   function loadMammoth(){ if(window.mammoth) return Promise.resolve(); return new Promise(function(res,rej){ var s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/mammoth@1/mammoth.browser.min.js'; s.onload=function(){res();}; s.onerror=function(){rej(new Error('Could not load the Word reader.'));}; document.head.appendChild(s); }); }
   document.getElementById('cwBtn').onclick=function(){ if(!getKey()){ needKey(); return; } cwInput.click(); };
+  function splitCw(ans){
+    var idx=ans.indexOf('===HELP===');
+    if(idx>=0){ var o=ans.slice(0,idx).replace(/^\s*ORIGINAL[^\n]*\n?/i,'').trim(); var h=ans.slice(idx+10).replace(/^[\s:]*/,'').trim(); return {original:o, help:h}; }
+    return { original:'', help:ans.trim() };
+  }
+  function twoColBlock(originalText, helpText, mode){
+    var two=document.createElement('div'); two.style.cssText='display:flex;flex-wrap:wrap;gap:16px;margin-top:8px;';
+    var oCol=document.createElement('div'); oCol.style.cssText='flex:1 1 320px;min-width:0;';
+    var oL=document.createElement('span'); oL.className='lbl'; oL.textContent='What you uploaded';
+    var oB=document.createElement('div'); oB.className='readtext'; oB.style.cssText='margin-top:6px;background:#fff;border:1px solid #e7ddc9;border-radius:12px;padding:12px 14px;'; oB.textContent=originalText||'(Could not read the original text.)';
+    oCol.appendChild(oL); oCol.appendChild(oB); if(originalText) oCol.appendChild(makeReadBar(function(){ return originalText; }));
+    var hCol=document.createElement('div'); hCol.style.cssText='flex:1 1 320px;min-width:0;';
+    var hL=document.createElement('span'); hL.className='lbl'; hL.textContent=(mode==='check')?'Feedback on your work':'How to do this task';
+    var hB=document.createElement('div'); hB.className='readtext'; hB.style.cssText='margin-top:6px;background:#fbf6ea;border-radius:12px;padding:12px 14px;'; hB.textContent=helpText||'';
+    hCol.appendChild(hL); hCol.appendChild(hB); hCol.appendChild(makeReadBar(function(){ return helpText; }));
+    two.appendChild(oCol); two.appendChild(hCol);
+    return two;
+  }
   cwInput.onchange=function(){
     var file=cwInput.files[0]; if(!file) return;
     var prev=document.getElementById('cwPreview'); prev.innerHTML='';
@@ -1549,35 +1579,79 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     else { prev.innerHTML='<div class="hint">📄 '+esc(file.name||'document')+'</div>'; }
     var prog=document.getElementById('cwProgress'); prog.innerHTML='<p class="hint">Reading your coursework…</p>';
     var sys='You are a kind tutor helping Marvelous, a 16-year-old with dyslexia doing WJEC Level 1/2 Hospitality and Catering coursework (the NEA). This coursework is graded and MUST be entirely her own work. She can be disqualified if anyone, including an AI, writes any of it for her. So you must NEVER write the coursework, answers, paragraphs or sentences for her to copy. Use short, simple, kind sentences. Do not use markdown, asterisks, hash signs or emojis.';
-    var task = (cwMode==='check')
+    var helpTask = (cwMode==='check')
       ? 'This is Marvelous\u2019s own draft work. Give kind, encouraging feedback. First say what she has done well. Then gently point out what could be clearer, or what looks missing compared with what the task needs. Then ask a few simple questions to help her improve it herself. Do NOT rewrite it or write any new sentences for her.'
       : 'Explain in plain simple words what this task is asking her to do. Break it into small steps she can follow, like a checklist. List the main things she needs to include. Give a few gentle questions to get her thinking. Do NOT write the answer for her.';
+    var task = 'Respond in two parts.\n\nFirst write a line with only this word: ORIGINAL\nThen copy out the words from the document as faithfully as you can, so she can see what she uploaded.\n\nThen write a line with only: ===HELP===\nThen do this: '+helpTask;
     var call;
     if(isDocx){
       call = loadMammoth().then(function(){ return file.arrayBuffer(); }).then(function(ab){ return window.mammoth.extractRawText({arrayBuffer:ab}); })
-        .then(function(r){ var text=((r&&r.value)||'').trim(); if(!text){ throw new Error('The Word file looked empty.'); } return claude({ system:sys, max_tokens:1300, messages:[{role:'user', content: task+'\n\nHere is her document:\n\n'+text}] }); });
+        .then(function(r){ var text=((r&&r.value)||'').trim(); if(!text){ throw new Error('The Word file looked empty.'); } return claude({ system:sys, max_tokens:2000, messages:[{role:'user', content: task+'\n\nHere is her document:\n\n'+text}] }); });
     } else if(isPdf){
-      call = fileToB64(file).then(function(b64){ return claude({ system:sys, max_tokens:1300, messages:[{role:'user', content:[{type:'document', source:{type:'base64', media_type:'application/pdf', data:b64}}, {type:'text', text:task}]}] }); });
+      call = fileToB64(file).then(function(b64){ return claude({ system:sys, max_tokens:2000, messages:[{role:'user', content:[{type:'document', source:{type:'base64', media_type:'application/pdf', data:b64}}, {type:'text', text:task}]}] }); });
     } else {
-      call = fileToB64(file).then(function(b64){ return claude({ system:sys, max_tokens:1300, messages:[{role:'user', content:[{type:'image', source:{type:'base64', media_type:mediaType(file), data:b64}}, {type:'text', text:task}]}] }); });
+      call = fileToB64(file).then(function(b64){ return claude({ system:sys, max_tokens:2000, messages:[{role:'user', content:[{type:'image', source:{type:'base64', media_type:mediaType(file), data:b64}}, {type:'text', text:task}]}] }); });
     }
     call.then(function(ans){
       prog.innerHTML='';
+      var parts=splitCw(ans); var original=parts.original, help=parts.help;
       var res=document.getElementById('cwResult'); res.innerHTML='';
       var card=document.createElement('div'); card.className='card';
-      var h=document.createElement('div'); h.style.cssText='font-family:Saira Condensed,sans-serif;color:var(--herb);font-size:22px;margin:0 0 8px;'; h.textContent = (cwMode==='check')?'Feedback on your work':'How to do this task';
-      var body=document.createElement('div'); body.className='readtext'; body.textContent=ans;
-      card.appendChild(h); card.appendChild(body);
-      card.appendChild(makeReadBar(function(){ return ans; }));
-      var save=document.createElement('button'); save.className='btn primary block'; save.style.marginTop='12px'; save.textContent='Save as a note';
-      save.onclick=function(){ openSaveModal({ title:(cwMode==='check')?'Coursework feedback':'Coursework plan', text: ans }); };
+      card.appendChild(twoColBlock(original, help, cwMode));
+      var save=document.createElement('button'); save.className='btn primary block'; save.style.marginTop='12px'; save.textContent='📁 Save to my coursework';
+      save.onclick=function(){
+        openSaveModal({
+          modalTitle:'Save to my coursework', modalHint:'Give it a name and a group, then save. It stays here in Coursework.',
+          textLabel:'The help — you can edit it',
+          title:(cwMode==='check')?'Coursework feedback':'Coursework plan', text: help,
+          customSave:function(v){ courseworkAdd({ id:'c'+Date.now(), title:v.title, heading:v.heading, original:original, help:v.text, mode:cwMode, ts:Date.now() }); }
+        });
+      };
       card.appendChild(save);
-      var del=document.createElement('button'); del.className='btn ghost block'; del.style.marginTop='8px'; del.textContent='🗑 Delete';
+      var del=document.createElement('button'); del.className='btn ghost block'; del.style.marginTop='8px'; del.textContent='🗑 Discard';
       del.onclick=function(){ res.innerHTML=''; prev.innerHTML=''; };
       card.appendChild(del);
       res.appendChild(card);
     }).catch(function(e){ prog.innerHTML=''; toast(e.message||'Could not read the coursework. Try a clear photo.'); });
   };
+  function courseworkAdd(item){
+    item.heading=(item.heading||'').trim();
+    coursework.unshift(item); saveCoursework(); renderCoursework();
+    document.getElementById('cwResult').innerHTML=''; document.getElementById('cwPreview').innerHTML='';
+    toast('Saved to your coursework.');
+  }
+  function renderCoursework(){
+    var wrap=document.getElementById('cwList'); if(!wrap) return; wrap.innerHTML='';
+    if(!coursework.length){ wrap.innerHTML='<p class="empty">Your saved coursework will appear here, kept in groups.</p>'; return; }
+    var groups={}, order=[];
+    for(var gi=0; gi<coursework.length; gi++){ var hn=(coursework[gi].heading||'').trim(); var key=hn||'\u0000'; if(!groups[key]){ groups[key]=[]; order.push(key); } groups[key].push(coursework[gi]); }
+    order.sort(function(a,b){ if(a==='\u0000') return 1; if(b==='\u0000') return -1; return 0; });
+    for(var oi=0; oi<order.length; oi++){ var gk=order[oi]; var arr=groups[gk];
+      var title=(gk==='\u0000')?'📄 Unfiled':('📁 '+gk); var hd=document.createElement('div'); hd.style.cssText='font-family:Saira Condensed,sans-serif;text-transform:uppercase;letter-spacing:1px;font-size:15px;color:var(--herb);font-weight:700;margin:16px 0 8px;'; hd.textContent=title+'  ('+arr.length+')'; wrap.appendChild(hd);
+      for(var i=0;i<arr.length;i++){ (function(it){
+        var open=!!cwExpanded[it.id];
+        var card=document.createElement('div'); card.className='card note-item';
+        var head=document.createElement('div'); head.style.cssText='display:flex;align-items:flex-start;gap:10px;cursor:pointer;';
+        var ic=document.createElement('div'); ic.textContent=(it.mode==='check')?'📝':'📋'; ic.style.cssText='font-size:22px;flex:0 0 auto;';
+        var mid=document.createElement('div'); mid.style.cssText='flex:1;min-width:0;';
+        var h=document.createElement('h3'); h.style.margin='0'; h.textContent=it.title||'Coursework';
+        var meta=document.createElement('div'); meta.className='meta'; meta.textContent=((it.mode==='check')?'Checked · ':'Planned · ')+new Date(it.ts).toLocaleString();
+        mid.appendChild(h); mid.appendChild(meta);
+        var chev=document.createElement('div'); chev.textContent=open?'▲':'▼'; chev.style.cssText='color:var(--ink-soft);flex:0 0 auto;font-size:13px;margin-top:4px;';
+        head.appendChild(ic); head.appendChild(mid); head.appendChild(chev);
+        head.onclick=function(){ if(open){ delete cwExpanded[it.id]; } else { cwExpanded[it.id]=true; } renderCoursework(); };
+        card.appendChild(head);
+        if(open){
+          card.appendChild(twoColBlock(it.original, it.help, it.mode));
+          var row=document.createElement('div'); row.className='row'; row.style.marginTop='10px';
+          var del=document.createElement('button'); del.className='btn ghost small'; del.textContent='🗑 Delete';
+          del.onclick=function(){ if(!window.confirm('Delete this coursework?')) return; coursework=coursework.filter(function(x){return x.id!==it.id;}); delete cwExpanded[it.id]; saveCoursework(); renderCoursework(); };
+          row.appendChild(del); card.appendChild(row);
+        }
+        wrap.appendChild(card);
+      })(arr[i]); }
+    }
+  }
 
   /* ---------- SLIDES (she flips them herself) ---------- */
   var dk={slides:[], i:0, auto:false};
@@ -1827,7 +1901,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
 
   document.addEventListener('visibilitychange', function(){ if(document.hidden) stopSpeak(); });
 
-  applySettings(); renderNotes(); renderChat(); renderVideos();
+  applySettings(); renderNotes(); renderChat(); renderVideos(); renderCoursework();
 
   /* ---- whole-canvas zoom (increase/decrease at will) ---- */
   var zoom = parseFloat(localStorage.getItem('sl_zoom')||'1'); if(isNaN(zoom)) zoom=1;
