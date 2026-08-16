@@ -481,6 +481,11 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   </div>
 </div>
 
+<div id="hlFloat" style="display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:120;background:#2b2622;border-radius:28px;padding:8px 14px;box-shadow:0 8px 24px rgba(0,0,0,.4);align-items:center;gap:9px;max-width:94vw;flex-wrap:wrap;justify-content:center;">
+  <span style="color:#fff;font-size:16px;font-family:'Saira Condensed',sans-serif;font-weight:700;letter-spacing:.3px;">🖍 Highlight</span>
+  <button id="hlFloatClose" style="background:rgba(255,255,255,.18);border:none;color:#fff;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;padding:0;">✕</button>
+</div>
+
 <div id="zoomBar" style="position:fixed;right:12px;bottom:14px;z-index:85;display:flex;gap:6px;align-items:center;background:var(--herb);color:#fff;border-radius:22px;padding:5px 8px;box-shadow:0 4px 14px rgba(0,0,0,.28);opacity:.94;">
   <button id="zoomOut" title="Smaller" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:20px;font-weight:800;cursor:pointer;line-height:1;">A−</button>
   <span id="zoomVal" style="font-size:13px;min-width:40px;text-align:center;font-family:'Saira Condensed',sans-serif;font-weight:700;">100%</span>
@@ -755,12 +760,24 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     }catch(e){ return null; }
   }
   var activeSel=null;
+  var hlRegistry={};
+  function registerHl(id, get, set, rerender){ if(id) hlRegistry[id]={get:get, set:set, rerender:rerender}; }
+  function showHlFloat(){ var f=document.getElementById('hlFloat'); if(f) f.style.display='flex'; }
+  function hideHlFloat(){ var f=document.getElementById('hlFloat'); if(f) f.style.display='none'; }
+  function applyFloat(color){
+    if(!activeSel){ hideHlFloat(); return; }
+    var reg=hlRegistry[activeSel.id]; if(!reg){ hideHlFloat(); return; }
+    var list=(reg.get()||[]).slice(); list.push({s:activeSel.s, e:activeSel.e, c:color||'#ffe86b'}); reg.set(list); activeSel=null; hideHlFloat(); reg.rerender();
+  }
   document.addEventListener('selectionchange', function(){
-    var sel=window.getSelection(); if(!sel||!sel.rangeCount) return;
-    var range=sel.getRangeAt(0); if(range.collapsed) return;
+    var sel=window.getSelection();
+    if(!sel||!sel.rangeCount || sel.getRangeAt(0).collapsed){ hideHlFloat(); return; }
+    var range=sel.getRangeAt(0);
     var node=range.commonAncestorContainer; var el=node.nodeType===1?node:node.parentNode;
-    var target=(el&&el.closest)?el.closest('.hl-target'):null; if(!target) return;
-    var off=rangeOffsets(target, range); if(off) activeSel={ id:target.getAttribute('data-hlid'), s:off.s, e:off.e };
+    var target=(el&&el.closest)?el.closest('.hl-target'):null;
+    if(!target){ hideHlFloat(); return; }
+    var off=rangeOffsets(target, range);
+    if(off){ activeSel={ id:target.getAttribute('data-hlid'), s:off.s, e:off.e }; showHlFloat(); } else { hideHlFloat(); }
   });
   function doHighlight(id, getList, setList, rerender, color){
     if(!activeSel || activeSel.id!==id){ toast('Select some words first, then tap a colour.'); return; }
@@ -771,11 +788,13 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     for(var i=0;i<marks.length;i++){ (function(mk){ mk.onclick=function(ev){ ev.stopPropagation(); var hi=parseInt(mk.getAttribute('data-hi'),10); var list=(getList()||[]).slice(); if(hi>=0 && hi<list.length){ list.splice(hi,1); setList(list); rerender(); } }; })(marks[i]); }
   }
   var HL_COLORS=[['#ffe86b','Yellow'],['#a8e6a1','Green'],['#ffb3d1','Pink'],['#a8d8ff','Blue'],['#ffcf9e','Orange'],['#e0b3ff','Purple']];
+  (function(){ var f=document.getElementById('hlFloat'); if(!f) return; var close=document.getElementById('hlFloatClose'); HL_COLORS.forEach(function(c){ var sw=document.createElement('button'); sw.title='Highlight in '+c[1]; sw.setAttribute('aria-label','Highlight in '+c[1]); sw.style.cssText='width:30px;height:30px;border-radius:50%;border:2px solid rgba(255,255,255,.45);background:'+c[0]+';cursor:pointer;padding:0;flex:0 0 auto;'; sw.onmousedown=function(e){ e.preventDefault(); }; sw.onclick=function(){ applyFloat(c[0]); }; f.insertBefore(sw, close); }); if(close) close.onclick=hideHlFloat; })();
   function highlightBar(id, getList, setList, rerender){
-    var wrap=document.createElement('div'); wrap.className='row'; wrap.style.cssText='margin-top:6px;align-items:center;gap:7px;flex-wrap:wrap;';
-    var lbl=document.createElement('span'); lbl.textContent='🖍'; lbl.style.cssText='font-size:17px;'; wrap.appendChild(lbl);
-    HL_COLORS.forEach(function(c){ var sw=document.createElement('button'); sw.title='Highlight in '+c[1]; sw.setAttribute('aria-label','Highlight in '+c[1]); sw.style.cssText='width:26px;height:26px;border-radius:50%;border:2px solid rgba(0,0,0,.18);background:'+c[0]+';cursor:pointer;padding:0;'; sw.onclick=function(){ doHighlight(id, getList, setList, rerender, c[0]); }; wrap.appendChild(sw); });
-    if((getList()||[]).length){ var clr=document.createElement('button'); clr.className='btn ghost small'; clr.textContent='Clear'; clr.onclick=function(){ setList([]); rerender(); }; wrap.appendChild(clr); }
+    registerHl(id, getList, setList, rerender);
+    var wrap=document.createElement('div'); wrap.className='row'; wrap.style.cssText='margin-top:6px;align-items:center;gap:8px;';
+    var hint=document.createElement('span'); hint.style.cssText='font-size:13px;color:var(--ink-soft);'; hint.textContent='🖍 Select text to highlight';
+    wrap.appendChild(hint);
+    if((getList()||[]).length){ var clr=document.createElement('button'); clr.className='btn ghost small'; clr.textContent='Clear highlights'; clr.onclick=function(){ setList([]); rerender(); }; wrap.appendChild(clr); }
     return wrap;
   }
   function textNodesIn(node){ var out=[]; var w=document.createTreeWalker(node, NodeFilter.SHOW_TEXT, null, false); var n; while((n=w.nextNode())) out.push(n); return out; }
