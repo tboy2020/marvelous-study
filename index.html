@@ -870,10 +870,22 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   function audioGet(key){ if(!IDB_OK) return Promise.resolve(null); return adb().then(function(db){ return new Promise(function(res,rej){ var tx=db.transaction('audio','readonly'); var rq=tx.objectStore('audio').get(key); rq.onsuccess=function(){res(rq.result||null);}; rq.onerror=function(){rej(rq.error);}; }); }).catch(function(){ return null; }); }
   function audioDel(key){ if(!IDB_OK) return Promise.resolve(); return adb().then(function(db){ return new Promise(function(res){ var tx=db.transaction('audio','readwrite'); tx.objectStore('audio').delete(key); tx.oncomplete=function(){res();}; tx.onerror=function(){res();}; }); }).catch(function(){}); }
 
+  /* ---- clean up speech-to-text (fix mis-hearings like "cos work" -> "coursework") ---- */
+  function cleanTranscript(text){
+    var raw=(text||'').trim();
+    if(!getKey() || !raw) return Promise.resolve(raw);
+    return claude({
+      system:'You fix speech-to-text mistakes for a UK teenager studying WJEC Hospitality and Catering who has a slight accent. Correct obvious mis-hearings and spelling so the words match what she meant. For example "cos work", "course work" or "cause work" must become "coursework"; spell catering, cooking and food-safety words correctly; fix punctuation and capitalisation. Do NOT add anything new, do NOT change her meaning, and do NOT answer or reply to her — return ONLY the corrected version of exactly what she said, nothing else.',
+      messages:[{role:'user', content: raw}],
+      max_tokens: Math.min(3000, Math.ceil(raw.length/2)+120)
+    }).then(function(out){ var c=(out||'').trim(); return c || raw; }).catch(function(){ return raw; });
+  }
+
   /* ---- reusable Talk (voice → text into any field) ---- */
   function wireTalk(btn, target, status){
     var rec=null, chunks=[], recording=false, iv=null;
     var label=btn.getAttribute('data-label')||btn.textContent;
+    function insert(clean){ if(clean){ target.value=(target.value?target.value.replace(/\s*$/,'')+' ':'')+clean; } if(status) status.textContent=clean?'Added. ✓':'Did not catch that — try again.'; try{target.focus();}catch(e){} }
     btn.onclick=function(){
       if(recording){ if(rec) rec.stop(); return; }
       if(!navigator.mediaDevices||!window.MediaRecorder){ toast('This browser cannot record.'); return; }
@@ -881,15 +893,15 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
         chunks=[]; try{ rec=new MediaRecorder(stream); }catch(e){ rec=new MediaRecorder(stream,{mimeType:'audio/mp4'}); }
         rec.ondataavailable=function(e){ if(e.data&&e.data.size) chunks.push(e.data); };
         rec.onstop=function(){
+          recording=false; btn.textContent=label;
           var blob=new Blob(chunks,{type:(rec.mimeType||'audio/webm')}); stream.getTracks().forEach(function(t){t.stop();});
           if(status) status.textContent='Turning your words into text…';
-          var done=function(txt){ var add=(txt||'').trim(); if(add){ target.value=(target.value?target.value.replace(/\s*$/,'')+' ':'')+add; } if(status) status.textContent=add?'Added. ✓':'Did not catch that — try again.'; try{target.focus();}catch(e){} };
-          if(getGroq()){ transcribeGroq(blob).then(function(segs){ done(segs.map(function(s){return s.text;}).join(' ')); }).catch(function(){ if(status) status.textContent='Could not transcribe. Check the Groq key.'; }); return; }
+          var handle=function(txt){ var raw=(txt||'').trim(); if(!raw){ if(status) status.textContent='Did not catch that — try again.'; return; } if(status) status.textContent='Tidying up the words…'; cleanTranscript(raw).then(insert); };
+          if(getGroq()){ transcribeGroq(blob).then(function(segs){ handle(segs.map(function(s){return s.text;}).join(' ')); }).catch(function(){ if(status) status.textContent='Could not transcribe. Check the Groq key.'; }); return; }
           if(isPhone()){ if(status) status.textContent='On a phone, use the keyboard microphone instead.'; return; }
-          window.SL_loadWhisper(function(){}).then(function(){ return blobToMono16k(blob); }).then(function(f){ return window.SL_transcribe(f); }).then(done).catch(function(){ if(status) status.textContent='Could not transcribe here.'; });
+          window.SL_loadWhisper(function(){}).then(function(){ return blobToMono16k(blob); }).then(function(f){ return window.SL_transcribe(f); }).then(handle).catch(function(){ if(status) status.textContent='Could not transcribe here.'; });
         };
         rec.start(); recording=true; btn.textContent='■ Stop'; if(status) status.textContent='Listening… tap Stop when done.';
-        iv=setInterval(function(){ if(rec && rec.state==='inactive'){ recording=false; btn.textContent=label; clearInterval(iv); } }, 400);
       }).catch(function(){ toast('Microphone permission not given.'); });
     };
   }
@@ -1217,7 +1229,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
         var blob=new Blob(askChunks,{type:(askRec.mimeType||'audio/webm')}); stream.getTracks().forEach(function(t){t.stop();});
         st.textContent='Turning your words into text…';
         if(getGroq()){
-          transcribeGroq(blob).then(function(segs){ var text=segs.map(function(s){return s.text;}).join(' ').trim(); var ta=document.getElementById('askInput'); ta.value=(ta.value?ta.value+' ':'')+text; st.textContent='Added. Check it, then tap Ask.'; })
+          transcribeGroq(blob).then(function(segs){ var text=segs.map(function(s){return s.text;}).join(' ').trim(); if(!text){ st.textContent='Did not catch that.'; return; } st.textContent='Tidying up the words…'; cleanTranscript(text).then(function(c){ var ta=document.getElementById('askInput'); ta.value=(ta.value?ta.value+' ':'')+c; st.textContent='Added. Check it, then tap Ask.'; }); })
             .catch(function(){ st.textContent='Could not transcribe. Try typing, or the keyboard mic.'; });
           return;
         }
@@ -1225,7 +1237,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
         window.SL_loadWhisper(function(p){ if(p&&p.status==='progress'&&p.total){ st.textContent='Getting ready… '+Math.round(p.loaded/p.total*100)+'%'; } })
           .then(function(){ return blobToMono16k(blob); })
           .then(function(f32){ return window.SL_transcribe(f32); })
-          .then(function(text){ var ta=document.getElementById('askInput'); ta.value=(ta.value?ta.value+' ':'')+(text||''); st.textContent='Added. Check it, then tap Ask.'; })
+          .then(function(text){ if(!text){ st.textContent='Did not catch that.'; return; } st.textContent='Tidying up the words…'; cleanTranscript(text).then(function(c){ var ta=document.getElementById('askInput'); ta.value=(ta.value?ta.value+' ':'')+c; st.textContent='Added. Check it, then tap Ask.'; }); })
           .catch(function(){ st.textContent='Could not transcribe here — try typing, or the keyboard mic.'; });
       };
       askRec.start(); askRecording=true; btn.textContent='■ Stop'; st.textContent='Listening… tap Stop when done.';
@@ -1552,7 +1564,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   var cwInput=document.getElementById('cwInput');
   function loadMammoth(){ if(window.mammoth) return Promise.resolve(); return new Promise(function(res,rej){ var s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/mammoth@1/mammoth.browser.min.js'; s.onload=function(){res();}; s.onerror=function(){rej(new Error('Could not load the Word reader.'));}; document.head.appendChild(s); }); }
   document.getElementById('cwBtn').onclick=function(){ if(!getKey()){ needKey(); return; } cwInput.click(); };
-  function docPaper(){ var d=document.createElement('div'); d.className='cw-doc'; d.style.cssText='margin-top:6px;background:#fff;border:1px solid #e7ddc9;border-radius:12px;padding:16px 18px;max-height:70vh;overflow:auto;line-height:1.6;'; return d; }
+  function docPaper(){ var d=document.createElement('div'); d.className='cw-doc'; d.style.cssText='margin-top:6px;background:#fff;border:1px solid #e7ddc9;border-radius:12px;padding:16px 18px;line-height:1.6;'; return d; }
   function renderOrig(container, orig){
     container.innerHTML='';
     if(!orig){ container.innerHTML='<div class="hint" style="margin-top:6px;">(No preview available.)</div>'; return; }
