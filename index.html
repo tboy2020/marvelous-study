@@ -1553,8 +1553,16 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   function loadMammoth(){ if(window.mammoth) return Promise.resolve(); return new Promise(function(res,rej){ var s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/mammoth@1/mammoth.browser.min.js'; s.onload=function(){res();}; s.onerror=function(){rej(new Error('Could not load the Word reader.'));}; document.head.appendChild(s); }); }
   document.getElementById('cwBtn').onclick=function(){ if(!getKey()){ needKey(); return; } cwInput.click(); };
   function splitCw(ans){
-    var idx=ans.indexOf('===HELP===');
-    if(idx>=0){ var o=ans.slice(0,idx).replace(/^\s*ORIGINAL[^\n]*\n?/i,'').trim(); var h=ans.slice(idx+10).replace(/^[\s:]*/,'').trim(); return {original:o, help:h}; }
+    ans=(ans||'').replace(/\r/g,'');
+    var m=ans.match(/={2,}\s*HELP\s*={2,}/i);
+    if(m){
+      var i=ans.indexOf(m[0]);
+      var o=ans.slice(0,i).replace(/={2,}\s*ORIGINAL\s*={2,}/i,'').replace(/^\s*ORIGINAL[:\s]*/i,'').trim();
+      var h=ans.slice(i+m[0].length).replace(/^[\s:]*/,'').trim();
+      return { original:o, help:h };
+    }
+    var alt=ans.match(/\n\s*HELP[:\s]*\n/i);
+    if(alt){ var j=ans.indexOf(alt[0]); return { original:ans.slice(0,j).replace(/={2,}\s*ORIGINAL\s*={2,}/i,'').replace(/^\s*ORIGINAL[:\s]*/i,'').trim(), help:ans.slice(j+alt[0].length).trim() }; }
     return { original:'', help:ans.trim() };
   }
   function twoColBlock(originalText, helpText, mode){
@@ -1582,7 +1590,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     var helpTask = (cwMode==='check')
       ? 'This is Marvelous\u2019s own draft work. Give kind, encouraging feedback. First say what she has done well. Then gently point out what could be clearer, or what looks missing compared with what the task needs. Then ask a few simple questions to help her improve it herself. Do NOT rewrite it or write any new sentences for her.'
       : 'Explain in plain simple words what this task is asking her to do. Break it into small steps she can follow, like a checklist. List the main things she needs to include. Give a few gentle questions to get her thinking. Do NOT write the answer for her.';
-    var task = 'Respond in two parts.\n\nFirst write a line with only this word: ORIGINAL\nThen copy out the words from the document as faithfully as you can, so she can see what she uploaded.\n\nThen write a line with only: ===HELP===\nThen do this: '+helpTask;
+    var task = 'You must reply using two markers EXACTLY as shown, each on its own line.\n\nFirst line: ===ORIGINAL===\nThen copy out the words from the document as faithfully as you can, so she can see what she uploaded.\n\nThen a line: ===HELP===\nThen do this: '+helpTask+'\n\nDo not put anything before the first ===ORIGINAL=== marker.';
     var call;
     if(isDocx){
       call = loadMammoth().then(function(){ return file.arrayBuffer(); }).then(function(ab){ return window.mammoth.extractRawText({arrayBuffer:ab}); })
