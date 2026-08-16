@@ -1600,6 +1600,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     var oCol=document.createElement('div'); oCol.style.cssText='flex:1 1 340px;min-width:0;';
     var oL=document.createElement('span'); oL.className='lbl'; oL.textContent='What you uploaded';
     var oBox=document.createElement('div'); oCol.appendChild(oL); oCol.appendChild(oBox); renderOrig(oBox, origSpec);
+    if(origSpec && origSpec.kind==='html'){ var otext=htmlToText(origSpec.html); if(otext) oCol.appendChild(makeReadBar(function(){ return otext; })); }
     var hCol=document.createElement('div'); hCol.style.cssText='flex:1 1 340px;min-width:0;';
     var hL=document.createElement('span'); hL.className='lbl'; hL.textContent=(mode==='check')?'Feedback on your work':'How to do this task';
     var hB=document.createElement('div'); hB.className='readtext'; hB.style.cssText='margin-top:6px;background:#fbf6ea;border-radius:12px;padding:12px 14px;'; hB.textContent=helpText||'';
@@ -1615,7 +1616,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     oCol.appendChild(oL); oCol.appendChild(oBox);
     audioGet('cwo_'+it.id).then(function(blob){
       if(!blob){ oBox.innerHTML='<div class="hint" style="margin-top:6px;">(Document not saved on this device.)</div>'; return; }
-      if(it.origKind==='html'){ (blob.text?blob.text():new Response(blob).text()).then(function(html){ renderOrig(oBox,{kind:'html',html:html}); }); }
+      if(it.origKind==='html'){ (blob.text?blob.text():new Response(blob).text()).then(function(html){ renderOrig(oBox,{kind:'html',html:html}); var otext=htmlToText(html); if(otext) oCol.appendChild(makeReadBar(function(){ return otext; })); }); }
       else if(it.origKind==='pdf'){ renderOrig(oBox,{kind:'pdf',url:URL.createObjectURL(blob)}); }
       else { renderOrig(oBox,{kind:'image',url:URL.createObjectURL(blob)}); }
     }).catch(function(){ oBox.innerHTML='<div class="hint" style="margin-top:6px;">(Could not load the document.)</div>'; });
