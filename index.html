@@ -850,8 +850,10 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
         if(n.summary){
           var sumCol=document.createElement('div'); sumCol.style.cssText='flex:1 1 320px;min-width:0;';
           var sLbl=document.createElement('span'); sLbl.className='lbl'; sLbl.textContent='Simple summary';
-          var sBody=document.createElement('div'); sBody.className='readtext'; sBody.style.cssText='margin-top:6px;font-size:19px;background:#fbf6ea;border-radius:12px;padding:12px 14px;'; sBody.textContent=n.summary;
+          var sBody=document.createElement('div'); sBody.className='readtext hl-target'; sBody.setAttribute('data-hlid','sum_'+n.id); sBody.style.cssText='margin-top:6px;font-size:19px;background:#fbf6ea;border-radius:12px;padding:12px 14px;'; sBody.innerHTML=renderRichText(n.summary, n.hlSummary);
+          wireMarks(sBody, function(){ return n.hlSummary; }, function(l){ n.hlSummary=l; saveNotes(); }, renderNotes);
           sumCol.appendChild(sLbl); sumCol.appendChild(sBody);
+          sumCol.appendChild(highlightBar('sum_'+n.id, function(){ return n.hlSummary; }, function(l){ n.hlSummary=l; saveNotes(); }, renderNotes));
           sumCol.appendChild(makeReadBar(function(){ return n.summary; }));
           twoCol.appendChild(sumCol);
         }
@@ -963,7 +965,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
           var blob=new Blob(chunks,{type:(rec.mimeType||'audio/webm')}); stream.getTracks().forEach(function(t){t.stop();});
           if(status) status.textContent='Turning your words into text…';
           var handle=function(txt){ var raw=(txt||'').trim(); if(!raw){ if(status) status.textContent='Did not catch that — try again.'; return; } if(status) status.textContent='Tidying up the words…'; cleanTranscript(raw).then(insert); };
-          if(getGroq()){ transcribeGroq(blob).then(function(segs){ handle(segs.map(function(s){return s.text;}).join(' ')); }).catch(function(){ if(status) status.textContent='Could not transcribe. Check the Groq key.'; }); return; }
+          if(getGroq()){ transcribeGroq(blob, null, {model:'whisper-large-v3', prompt:CATERING_PROMPT}).then(function(segs){ handle(segs.map(function(s){return s.text;}).join(' ')); }).catch(function(){ if(status) status.textContent='Could not transcribe. Check the Groq key.'; }); return; }
           if(isPhone()){ if(status) status.textContent='On a phone, use the keyboard microphone instead.'; return; }
           window.SL_loadWhisper(function(){}).then(function(){ return blobToMono16k(blob); }).then(function(f){ return window.SL_transcribe(f); }).then(handle).catch(function(){ if(status) status.textContent='Could not transcribe here.'; });
         };
@@ -1127,19 +1129,21 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     var off=44; for(var i=0;i<samples.length;i++){ var v=Math.max(-1,Math.min(1,samples[i])); view.setInt16(off, v<0?v*0x8000:v*0x7FFF, true); off+=2; }
     return new Blob([view],{type:'audio/wav'});
   }
-  function groqChunk(wavBlob, attempt){
-    var key=getGroq(); attempt=attempt||0;
+  var CATERING_PROMPT='Marvelous is a UK student studying WJEC Level 1/2 Hospitality and Catering. Words she often uses: coursework, NEA, controlled assessment, hospitality, catering, mise en place, cross-contamination, allergens, hygiene, sanitise, bacteria, temperature, refrigerate, garnish, presentation, menu planning, nutrition, Gloucester Academy.';
+  function groqChunk(wavBlob, attempt, opts){
+    var key=getGroq(); attempt=attempt||0; opts=opts||{};
     var fd=new FormData();
-    fd.append('file', wavBlob, 'audio.wav'); fd.append('model','whisper-large-v3-turbo');
+    fd.append('file', wavBlob, 'audio.wav'); fd.append('model', opts.model||'whisper-large-v3-turbo');
     fd.append('response_format','verbose_json'); fd.append('language','en');
+    if(opts.prompt) fd.append('prompt', opts.prompt);
     return fetch('https://api.groq.com/openai/v1/audio/transcriptions', { method:'POST', headers:{ 'Authorization':'Bearer '+key }, body:fd })
       .then(function(r){
-        if(r.status===429 && attempt<4){ return new Promise(function(res){ setTimeout(res, 2500*(attempt+1)); }).then(function(){ return groqChunk(wavBlob, attempt+1); }); }
+        if(r.status===429 && attempt<4){ return new Promise(function(res){ setTimeout(res, 2500*(attempt+1)); }).then(function(){ return groqChunk(wavBlob, attempt+1, opts); }); }
         if(!r.ok){ return r.text().then(function(t){ throw new Error('Groq '+r.status+': '+t.slice(0,140)); }); }
         return r.json();
       });
   }
-  function transcribeGroq(blob, onProgress){
+  function transcribeGroq(blob, onProgress, opts){
     var CHUNK=300, sr=16000;
     return blobToMono16k(blob).then(function(f32){
       var total=Math.max(1, Math.ceil(f32.length/(CHUNK*sr))), segs=[], t0=Date.now();
@@ -1148,7 +1152,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
         if(onProgress) onProgress(i, total, (Date.now()-t0)/1000);
         var s=i*CHUNK*sr, e=Math.min(f32.length,(i+1)*CHUNK*sr);
         var wav=encodeWAV(f32.subarray(s,e), sr);
-        return groqChunk(wav).then(function(res){
+        return groqChunk(wav, 0, opts).then(function(res){
           var offs=i*CHUNK, list=(res.segments&&res.segments.length)?res.segments:[{start:0,text:res.text||''}];
           for(var k=0;k<list.length;k++){ segs.push({start:(list[k].start||0)+offs, text:(list[k].text||'').trim()}); }
           return step(i+1);
@@ -1201,7 +1205,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
         var pct=Math.round(i/total*100); bar.style.width=pct+'%';
         var per=i>0?elapsed/i:0, eta=per>0?Math.round(per*(total-i)):0;
         lbl.textContent='Transcribing… part '+(i+1)+' of '+total+' · '+Math.round(elapsed)+'s so far'+(eta?(' · about '+eta+'s left'):'');
-      }).then(function(segments){
+      }, {prompt:CATERING_PROMPT}).then(function(segments){
         prog.innerHTML=''; recResultCard(buildTimed(segments)); btn.disabled=false;
       }).catch(function(e){ prog.innerHTML=''; toast(e.message||'Groq transcription failed. Check the key in Settings.'); btn.disabled=false; });
       return;
@@ -1295,7 +1299,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
         var blob=new Blob(askChunks,{type:(askRec.mimeType||'audio/webm')}); stream.getTracks().forEach(function(t){t.stop();});
         st.textContent='Turning your words into text…';
         if(getGroq()){
-          transcribeGroq(blob).then(function(segs){ var text=segs.map(function(s){return s.text;}).join(' ').trim(); if(!text){ st.textContent='Did not catch that.'; return; } st.textContent='Tidying up the words…'; cleanTranscript(text).then(function(c){ var ta=document.getElementById('askInput'); ta.value=(ta.value?ta.value+' ':'')+c; st.textContent='Added. Check it, then tap Ask.'; }); })
+          transcribeGroq(blob, null, {model:'whisper-large-v3', prompt:CATERING_PROMPT}).then(function(segs){ var text=segs.map(function(s){return s.text;}).join(' ').trim(); if(!text){ st.textContent='Did not catch that.'; return; } st.textContent='Tidying up the words…'; cleanTranscript(text).then(function(c){ var ta=document.getElementById('askInput'); ta.value=(ta.value?ta.value+' ':'')+c; st.textContent='Added. Check it, then tap Ask.'; }); })
             .catch(function(){ st.textContent='Could not transcribe. Try typing, or the keyboard mic.'; });
           return;
         }
