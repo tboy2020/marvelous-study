@@ -1552,29 +1552,42 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   var cwInput=document.getElementById('cwInput');
   function loadMammoth(){ if(window.mammoth) return Promise.resolve(); return new Promise(function(res,rej){ var s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/mammoth@1/mammoth.browser.min.js'; s.onload=function(){res();}; s.onerror=function(){rej(new Error('Could not load the Word reader.'));}; document.head.appendChild(s); }); }
   document.getElementById('cwBtn').onclick=function(){ if(!getKey()){ needKey(); return; } cwInput.click(); };
-  function splitCw(ans){
-    ans=(ans||'').replace(/\r/g,'');
-    var m=ans.match(/={2,}\s*HELP\s*={2,}/i);
-    if(m){
-      var i=ans.indexOf(m[0]);
-      var o=ans.slice(0,i).replace(/={2,}\s*ORIGINAL\s*={2,}/i,'').replace(/^\s*ORIGINAL[:\s]*/i,'').trim();
-      var h=ans.slice(i+m[0].length).replace(/^[\s:]*/,'').trim();
-      return { original:o, help:h };
-    }
-    var alt=ans.match(/\n\s*HELP[:\s]*\n/i);
-    if(alt){ var j=ans.indexOf(alt[0]); return { original:ans.slice(0,j).replace(/={2,}\s*ORIGINAL\s*={2,}/i,'').replace(/^\s*ORIGINAL[:\s]*/i,'').trim(), help:ans.slice(j+alt[0].length).trim() }; }
-    return { original:'', help:ans.trim() };
+  function docPaper(){ var d=document.createElement('div'); d.className='cw-doc'; d.style.cssText='margin-top:6px;background:#fff;border:1px solid #e7ddc9;border-radius:12px;padding:16px 18px;max-height:70vh;overflow:auto;line-height:1.6;'; return d; }
+  function renderOrig(container, orig){
+    container.innerHTML='';
+    if(!orig){ container.innerHTML='<div class="hint" style="margin-top:6px;">(No preview available.)</div>'; return; }
+    if(orig.kind==='html'){ var p=docPaper(); p.innerHTML=orig.html||'(empty document)'; container.appendChild(p); return; }
+    if(orig.kind==='pdf'){ var f=document.createElement('iframe'); f.src=orig.url; f.style.cssText='width:100%;height:70vh;border:1px solid #e7ddc9;border-radius:12px;background:#fff;margin-top:6px;'; container.appendChild(f); return; }
+    if(orig.kind==='image'){ var im=document.createElement('img'); im.src=orig.url; im.style.cssText='max-width:100%;border-radius:12px;border:1px solid #e7ddc9;margin-top:6px;'; container.appendChild(im); return; }
   }
-  function twoColBlock(originalText, helpText, mode){
+  function cwTwoCol(origSpec, helpText, mode){
     var two=document.createElement('div'); two.style.cssText='display:flex;flex-wrap:wrap;gap:16px;margin-top:8px;';
-    var oCol=document.createElement('div'); oCol.style.cssText='flex:1 1 320px;min-width:0;';
+    var oCol=document.createElement('div'); oCol.style.cssText='flex:1 1 340px;min-width:0;';
     var oL=document.createElement('span'); oL.className='lbl'; oL.textContent='What you uploaded';
-    var oB=document.createElement('div'); oB.className='readtext'; oB.style.cssText='margin-top:6px;background:#fff;border:1px solid #e7ddc9;border-radius:12px;padding:12px 14px;'; oB.textContent=originalText||'(Could not read the original text.)';
-    oCol.appendChild(oL); oCol.appendChild(oB); if(originalText) oCol.appendChild(makeReadBar(function(){ return originalText; }));
-    var hCol=document.createElement('div'); hCol.style.cssText='flex:1 1 320px;min-width:0;';
+    var oBox=document.createElement('div'); oCol.appendChild(oL); oCol.appendChild(oBox); renderOrig(oBox, origSpec);
+    var hCol=document.createElement('div'); hCol.style.cssText='flex:1 1 340px;min-width:0;';
     var hL=document.createElement('span'); hL.className='lbl'; hL.textContent=(mode==='check')?'Feedback on your work':'How to do this task';
     var hB=document.createElement('div'); hB.className='readtext'; hB.style.cssText='margin-top:6px;background:#fbf6ea;border-radius:12px;padding:12px 14px;'; hB.textContent=helpText||'';
     hCol.appendChild(hL); hCol.appendChild(hB); hCol.appendChild(makeReadBar(function(){ return helpText; }));
+    two.appendChild(oCol); two.appendChild(hCol);
+    return two;
+  }
+  function cwSavedTwoCol(it){
+    var two=document.createElement('div'); two.style.cssText='display:flex;flex-wrap:wrap;gap:16px;margin-top:8px;';
+    var oCol=document.createElement('div'); oCol.style.cssText='flex:1 1 340px;min-width:0;';
+    var oL=document.createElement('span'); oL.className='lbl'; oL.textContent='What you uploaded';
+    var oBox=document.createElement('div'); oBox.innerHTML='<div class="hint" style="margin-top:6px;">Loading your document…</div>';
+    oCol.appendChild(oL); oCol.appendChild(oBox);
+    audioGet('cwo_'+it.id).then(function(blob){
+      if(!blob){ oBox.innerHTML='<div class="hint" style="margin-top:6px;">(Document not saved on this device.)</div>'; return; }
+      if(it.origKind==='html'){ (blob.text?blob.text():new Response(blob).text()).then(function(html){ renderOrig(oBox,{kind:'html',html:html}); }); }
+      else if(it.origKind==='pdf'){ renderOrig(oBox,{kind:'pdf',url:URL.createObjectURL(blob)}); }
+      else { renderOrig(oBox,{kind:'image',url:URL.createObjectURL(blob)}); }
+    }).catch(function(){ oBox.innerHTML='<div class="hint" style="margin-top:6px;">(Could not load the document.)</div>'; });
+    var hCol=document.createElement('div'); hCol.style.cssText='flex:1 1 340px;min-width:0;';
+    var hL=document.createElement('span'); hL.className='lbl'; hL.textContent=(it.mode==='check')?'Feedback on your work':'How to do this task';
+    var hB=document.createElement('div'); hB.className='readtext'; hB.style.cssText='margin-top:6px;background:#fbf6ea;border-radius:12px;padding:12px 14px;'; hB.textContent=it.help||'';
+    hCol.appendChild(hL); hCol.appendChild(hB); hCol.appendChild(makeReadBar(function(){ return it.help; }));
     two.appendChild(oCol); two.appendChild(hCol);
     return two;
   }
@@ -1583,48 +1596,56 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     var prev=document.getElementById('cwPreview'); prev.innerHTML='';
     var isDocx = /\.docx$/i.test(file.name||'') || file.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
     var isPdf  = file.type==='application/pdf' || /\.pdf$/i.test(file.name||'');
-    if((file.type||'').indexOf('image')===0){ var img=document.createElement('img'); img.style.cssText='max-width:100%;border-radius:12px;'; img.src=URL.createObjectURL(file); prev.appendChild(img); }
+    if((file.type||'').indexOf('image')===0){ prev.innerHTML='<div class="hint">🖼 '+esc(file.name||'photo')+'</div>'; }
     else { prev.innerHTML='<div class="hint">📄 '+esc(file.name||'document')+'</div>'; }
     var prog=document.getElementById('cwProgress'); prog.innerHTML='<p class="hint">Reading your coursework…</p>';
     var sys='You are a kind tutor helping Marvelous, a 16-year-old with dyslexia doing WJEC Level 1/2 Hospitality and Catering coursework (the NEA). This coursework is graded and MUST be entirely her own work. She can be disqualified if anyone, including an AI, writes any of it for her. So you must NEVER write the coursework, answers, paragraphs or sentences for her to copy. Use short, simple, kind sentences. Do not use markdown, asterisks, hash signs or emojis.';
     var helpTask = (cwMode==='check')
       ? 'This is Marvelous\u2019s own draft work. Give kind, encouraging feedback. First say what she has done well. Then gently point out what could be clearer, or what looks missing compared with what the task needs. Then ask a few simple questions to help her improve it herself. Do NOT rewrite it or write any new sentences for her.'
       : 'Explain in plain simple words what this task is asking her to do. Break it into small steps she can follow, like a checklist. List the main things she needs to include. Give a few gentle questions to get her thinking. Do NOT write the answer for her.';
-    var task = 'You must reply using two markers EXACTLY as shown, each on its own line.\n\nFirst line: ===ORIGINAL===\nThen copy out the words from the document as faithfully as you can, so she can see what she uploaded.\n\nThen a line: ===HELP===\nThen do this: '+helpTask+'\n\nDo not put anything before the first ===ORIGINAL=== marker.';
-    var call;
-    if(isDocx){
-      call = loadMammoth().then(function(){ return file.arrayBuffer(); }).then(function(ab){ return window.mammoth.extractRawText({arrayBuffer:ab}); })
-        .then(function(r){ var text=((r&&r.value)||'').trim(); if(!text){ throw new Error('The Word file looked empty.'); } return claude({ system:sys, max_tokens:2000, messages:[{role:'user', content: task+'\n\nHere is her document:\n\n'+text}] }); });
-    } else if(isPdf){
-      call = fileToB64(file).then(function(b64){ return claude({ system:sys, max_tokens:2000, messages:[{role:'user', content:[{type:'document', source:{type:'base64', media_type:'application/pdf', data:b64}}, {type:'text', text:task}]}] }); });
-    } else {
-      call = fileToB64(file).then(function(b64){ return claude({ system:sys, max_tokens:2000, messages:[{role:'user', content:[{type:'image', source:{type:'base64', media_type:mediaType(file), data:b64}}, {type:'text', text:task}]}] }); });
-    }
-    call.then(function(ans){
+    function afterHelp(help, origSpec, blobForSave, kind){
       prog.innerHTML='';
-      var parts=splitCw(ans); var original=parts.original, help=parts.help;
       var res=document.getElementById('cwResult'); res.innerHTML='';
       var card=document.createElement('div'); card.className='card';
-      card.appendChild(twoColBlock(original, help, cwMode));
+      card.appendChild(cwTwoCol(origSpec, help, cwMode));
       var save=document.createElement('button'); save.className='btn primary block'; save.style.marginTop='12px'; save.textContent='📁 Save to my coursework';
       save.onclick=function(){
         openSaveModal({
           modalTitle:'Save to my coursework', modalHint:'Give it a name and a group, then save. It stays here in Coursework.',
           textLabel:'The help — you can edit it',
           title:(cwMode==='check')?'Coursework feedback':'Coursework plan', text: help,
-          customSave:function(v){ courseworkAdd({ id:'c'+Date.now(), title:v.title, heading:v.heading, original:original, help:v.text, mode:cwMode, ts:Date.now() }); }
+          customSave:function(v){ courseworkAdd({ id:'c'+Date.now(), title:v.title, heading:v.heading, help:v.text, mode:cwMode, ts:Date.now() }, blobForSave, kind); }
         });
       };
       card.appendChild(save);
       var del=document.createElement('button'); del.className='btn ghost block'; del.style.marginTop='8px'; del.textContent='🗑 Discard';
       del.onclick=function(){ res.innerHTML=''; prev.innerHTML=''; };
-      card.appendChild(del);
-      res.appendChild(card);
-    }).catch(function(e){ prog.innerHTML=''; toast(e.message||'Could not read the coursework. Try a clear photo.'); });
+      card.appendChild(del); res.appendChild(card);
+    }
+    function fail(e){ prog.innerHTML=''; toast((e&&e.message)||'Could not read the coursework. Try a clear photo.'); }
+    if(isDocx){
+      loadMammoth().then(function(){ return file.arrayBuffer(); }).then(function(ab){
+        return Promise.all([ window.mammoth.extractRawText({arrayBuffer:ab}), window.mammoth.convertToHtml({arrayBuffer:ab}) ]);
+      }).then(function(both){
+        var text=((both[0]&&both[0].value)||'').trim(); var html=((both[1]&&both[1].value)||'').trim();
+        if(!text){ throw new Error('The Word file looked empty.'); }
+        return claude({ system:sys, max_tokens:1500, messages:[{role:'user', content: helpTask+'\n\nHere is her document:\n\n'+text}] })
+          .then(function(help){ afterHelp(help, {kind:'html', html:html}, new Blob([html],{type:'text/html'}), 'html'); });
+      }).catch(fail);
+    } else if(isPdf){
+      var purl=URL.createObjectURL(file);
+      fileToB64(file).then(function(b64){ return claude({ system:sys, max_tokens:1500, messages:[{role:'user', content:[{type:'document', source:{type:'base64', media_type:'application/pdf', data:b64}}, {type:'text', text:helpTask}]}] }); })
+        .then(function(help){ afterHelp(help, {kind:'pdf', url:purl}, file, 'pdf'); }).catch(fail);
+    } else {
+      var iurl=URL.createObjectURL(file);
+      fileToB64(file).then(function(b64){ return claude({ system:sys, max_tokens:1500, messages:[{role:'user', content:[{type:'image', source:{type:'base64', media_type:mediaType(file), data:b64}}, {type:'text', text:helpTask}]}] }); })
+        .then(function(help){ afterHelp(help, {kind:'image', url:iurl}, file, 'image'); }).catch(fail);
+    }
   };
-  function courseworkAdd(item){
-    item.heading=(item.heading||'').trim();
+  function courseworkAdd(item, blob, kind){
+    item.heading=(item.heading||'').trim(); item.origKind=kind;
     coursework.unshift(item); saveCoursework(); renderCoursework();
+    if(blob){ audioPut('cwo_'+item.id, blob).then(function(){ renderCoursework(); }).catch(function(){}); }
     document.getElementById('cwResult').innerHTML=''; document.getElementById('cwPreview').innerHTML='';
     toast('Saved to your coursework.');
   }
@@ -1650,10 +1671,10 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
         head.onclick=function(){ if(open){ delete cwExpanded[it.id]; } else { cwExpanded[it.id]=true; } renderCoursework(); };
         card.appendChild(head);
         if(open){
-          card.appendChild(twoColBlock(it.original, it.help, it.mode));
+          card.appendChild(cwSavedTwoCol(it));
           var row=document.createElement('div'); row.className='row'; row.style.marginTop='10px';
           var del=document.createElement('button'); del.className='btn ghost small'; del.textContent='🗑 Delete';
-          del.onclick=function(){ if(!window.confirm('Delete this coursework?')) return; coursework=coursework.filter(function(x){return x.id!==it.id;}); delete cwExpanded[it.id]; saveCoursework(); renderCoursework(); };
+          del.onclick=function(){ if(!window.confirm('Delete this coursework?')) return; audioDel('cwo_'+it.id); coursework=coursework.filter(function(x){return x.id!==it.id;}); delete cwExpanded[it.id]; saveCoursework(); renderCoursework(); };
           row.appendChild(del); card.appendChild(row);
         }
         wrap.appendChild(card);
