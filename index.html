@@ -1568,6 +1568,23 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   function saveCoursework(){ save('sl_coursework', coursework); }
   document.getElementById('cwMode').addEventListener('click', function(e){ if(!e.target.classList.contains('opt'))return; var k=this.querySelectorAll('.opt'); for(var i=0;i<k.length;i++) k[i].classList.remove('sel'); e.target.classList.add('sel'); cwMode=e.target.getAttribute('data-val'); });
   var cwInput=document.getElementById('cwInput');
+  var CW_SYS='You are a kind tutor helping Marvelous, a 16-year-old with dyslexia doing WJEC Level 1/2 Hospitality and Catering coursework (the NEA). This coursework is graded and MUST be entirely her own work. She can be disqualified if anyone, including an AI, writes any of it for her. So you must NEVER write the coursework, answers, paragraphs or sentences for her to copy. Use short, simple, kind sentences. Do not use markdown, asterisks, hash signs or emojis.';
+  function cwHelpTask(mode){ return (mode==='check')
+    ? 'This is Marvelous\u2019s own draft work. Give kind, encouraging feedback. First say what she has done well. Then gently point out what could be clearer, or what looks missing compared with what the task needs. Then ask a few simple questions to help her improve it herself. Do NOT rewrite it or write any new sentences for her.'
+    : 'Explain in plain simple words what this task is asking her to do. Break it into small steps she can follow, like a checklist. List the main things she needs to include. Give a few gentle questions to get her thinking. Do NOT write the answer for her.'; }
+  function htmlToText(html){ var d=document.createElement('div'); d.innerHTML=html||''; return (d.textContent||d.innerText||'').trim(); }
+  function cwGetHelp(it){ return (it.helpByMode && it.helpByMode[it.mode]) || it.help || ''; }
+  function cwComputeHelp(it, mode){
+    return audioGet('cwo_'+it.id).then(function(blob){
+      if(!blob) throw new Error('The original is not saved on this device, so it cannot switch here.');
+      var task=cwHelpTask(mode);
+      if(it.origKind==='html'){ return (blob.text?blob.text():new Response(blob).text()).then(function(html){ var text=htmlToText(html); return claude({ system:CW_SYS, max_tokens:1500, messages:[{role:'user', content: task+'\n\nHere is her document:\n\n'+text}] }); }); }
+      return fileToB64(blob).then(function(b64){
+        var block = (it.origKind==='pdf') ? {type:'document', source:{type:'base64', media_type:'application/pdf', data:b64}} : {type:'image', source:{type:'base64', media_type:(it.origMime||'image/jpeg'), data:b64}};
+        return claude({ system:CW_SYS, max_tokens:1500, messages:[{role:'user', content:[block, {type:'text', text:task}]}] });
+      });
+    });
+  }
   function loadMammoth(){ if(window.mammoth) return Promise.resolve(); return new Promise(function(res,rej){ var s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/mammoth@1/mammoth.browser.min.js'; s.onload=function(){res();}; s.onerror=function(){rej(new Error('Could not load the Word reader.'));}; document.head.appendChild(s); }); }
   document.getElementById('cwBtn').onclick=function(){ if(!getKey()){ needKey(); return; } cwInput.click(); };
   function docPaper(){ var d=document.createElement('div'); d.className='cw-doc'; d.style.cssText='margin-top:6px;background:#fff;border:1px solid #e7ddc9;border-radius:12px;padding:16px 18px;line-height:1.6;'; return d; }
@@ -1604,8 +1621,8 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     }).catch(function(){ oBox.innerHTML='<div class="hint" style="margin-top:6px;">(Could not load the document.)</div>'; });
     var hCol=document.createElement('div'); hCol.style.cssText='flex:1 1 340px;min-width:0;';
     var hL=document.createElement('span'); hL.className='lbl'; hL.textContent=(it.mode==='check')?'Feedback on your work':'How to do this task';
-    var hB=document.createElement('div'); hB.className='readtext'; hB.style.cssText='margin-top:6px;background:#fbf6ea;border-radius:12px;padding:12px 14px;'; hB.textContent=it.help||'';
-    hCol.appendChild(hL); hCol.appendChild(hB); hCol.appendChild(makeReadBar(function(){ return it.help; }));
+    var hB=document.createElement('div'); hB.className='readtext'; hB.style.cssText='margin-top:6px;background:#fbf6ea;border-radius:12px;padding:12px 14px;'; hB.textContent=cwGetHelp(it);
+    hCol.appendChild(hL); hCol.appendChild(hB); hCol.appendChild(makeReadBar(function(){ return cwGetHelp(it); }));
     two.appendChild(oCol); two.appendChild(hCol);
     return two;
   }
@@ -1617,10 +1634,8 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     if((file.type||'').indexOf('image')===0){ prev.innerHTML='<div class="hint">🖼 '+esc(file.name||'photo')+'</div>'; }
     else { prev.innerHTML='<div class="hint">📄 '+esc(file.name||'document')+'</div>'; }
     var prog=document.getElementById('cwProgress'); prog.innerHTML='<p class="hint">Reading your coursework…</p>';
-    var sys='You are a kind tutor helping Marvelous, a 16-year-old with dyslexia doing WJEC Level 1/2 Hospitality and Catering coursework (the NEA). This coursework is graded and MUST be entirely her own work. She can be disqualified if anyone, including an AI, writes any of it for her. So you must NEVER write the coursework, answers, paragraphs or sentences for her to copy. Use short, simple, kind sentences. Do not use markdown, asterisks, hash signs or emojis.';
-    var helpTask = (cwMode==='check')
-      ? 'This is Marvelous\u2019s own draft work. Give kind, encouraging feedback. First say what she has done well. Then gently point out what could be clearer, or what looks missing compared with what the task needs. Then ask a few simple questions to help her improve it herself. Do NOT rewrite it or write any new sentences for her.'
-      : 'Explain in plain simple words what this task is asking her to do. Break it into small steps she can follow, like a checklist. List the main things she needs to include. Give a few gentle questions to get her thinking. Do NOT write the answer for her.';
+    var sys=CW_SYS;
+    var helpTask=cwHelpTask(cwMode);
     function afterHelp(help, origSpec, blobForSave, kind){
       prog.innerHTML='';
       var res=document.getElementById('cwResult'); res.innerHTML='';
@@ -1632,7 +1647,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
           modalTitle:'Save to my coursework', modalHint:'Give it a name and a group, then save. It stays here in Coursework.',
           textLabel:'The help — you can edit it',
           title:(cwMode==='check')?'Coursework feedback':'Coursework plan', text: help,
-          customSave:function(v){ courseworkAdd({ id:'c'+Date.now(), title:v.title, heading:v.heading, help:v.text, mode:cwMode, ts:Date.now() }, blobForSave, kind); }
+          customSave:function(v){ var hm={}; hm[cwMode]=v.text; courseworkAdd({ id:'c'+Date.now(), title:v.title, heading:v.heading, help:v.text, helpByMode:hm, mode:cwMode, origMime:(file.type||''), ts:Date.now() }, blobForSave, kind); }
         });
       };
       card.appendChild(save);
@@ -1667,6 +1682,15 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     document.getElementById('cwResult').innerHTML=''; document.getElementById('cwPreview').innerHTML='';
     toast('Saved to your coursework.');
   }
+  function cwSwitchMode(it, mode){
+    if(it.mode===mode && cwGetHelp(it)){ return; }
+    if(it.helpByMode && it.helpByMode[mode]){ it.mode=mode; saveCoursework(); renderCoursework(); return; }
+    if(!getKey()){ needKey(); return; }
+    it.mode=mode; saveCoursework(); renderCoursework();
+    toast(mode==='check'?'Checking your work…':'Planning the task…');
+    cwComputeHelp(it, mode).then(function(help){ if(!it.helpByMode) it.helpByMode={}; it.helpByMode[mode]=help; it.help=help; saveCoursework(); renderCoursework(); })
+      .catch(function(e){ toast((e&&e.message)||'Could not switch. Try again.'); });
+  }
   function renderCoursework(){
     var wrap=document.getElementById('cwList'); if(!wrap) return; wrap.innerHTML='';
     if(!coursework.length){ wrap.innerHTML='<p class="empty">Your saved coursework will appear here, kept in groups.</p>'; return; }
@@ -1689,6 +1713,12 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
         head.onclick=function(){ if(open){ delete cwExpanded[it.id]; } else { cwExpanded[it.id]=true; } renderCoursework(); };
         card.appendChild(head);
         if(open){
+          var mrow=document.createElement('div'); mrow.className='opts'; mrow.style.marginTop='10px';
+          var b1=document.createElement('button'); b1.className='opt'+(it.mode!=='check'?' sel':''); b1.textContent='📋 Explain & plan the task';
+          var b2=document.createElement('button'); b2.className='opt'+(it.mode==='check'?' sel':''); b2.textContent='📝 Check my own work';
+          b1.onclick=function(){ cwSwitchMode(it,'understand'); };
+          b2.onclick=function(){ cwSwitchMode(it,'check'); };
+          mrow.appendChild(b1); mrow.appendChild(b2); card.appendChild(mrow);
           card.appendChild(cwSavedTwoCol(it));
           var row=document.createElement('div'); row.className='row'; row.style.marginTop='10px';
           var del=document.createElement('button'); del.className='btn ghost small'; del.textContent='🗑 Delete';
