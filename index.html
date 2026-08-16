@@ -108,6 +108,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
 .wl-kb{width:100%;height:100%;object-fit:cover;will-change:transform;animation-timing-function:ease-in-out;animation-iteration-count:infinite;animation-direction:alternate;}
 .wl-emoji{font-size:96px;animation:wlFloat 3.4s ease-in-out infinite;}
 .wl-fade{animation:wlFadeUp .5s ease both;}
+mark.hl{ background:#ffe86b; color:inherit; border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-box-decoration-break:clone; cursor:pointer; }
 .cw-doc, .cw-doc *{ font-family:'Lexend','Inter',sans-serif !important; color:var(--ink) !important; }
 .cw-doc p, .cw-doc li, .cw-doc span, .cw-doc td, .cw-doc th, .cw-doc div{ font-size:var(--read-size,18px) !important; line-height:1.7; }
 .cw-doc h1, .cw-doc h2, .cw-doc h3{ font-family:'Saira Condensed',sans-serif !important; color:var(--herb) !important; }
@@ -730,6 +731,47 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function tsBold(text){ return esc(text).replace(/\[(\d{1,2}):(\d{2})\]/g, function(m,mm,ss){ var sec=(parseInt(mm,10)*60)+parseInt(ss,10); return '<b class="ts-chip" data-sec="'+sec+'" style="font-weight:800;color:#fff;background:var(--herb);padding:1px 7px;border-radius:6px;display:inline-block;margin:1px 2px;">['+mm+':'+ss+']</b>'; }); }
 
+  /* ---- highlighter: render text with timestamps + saved highlights ---- */
+  function tsChipHtml(mm,ss){ return '<b class="ts-chip" data-sec="'+((+mm)*60+(+ss))+'" style="font-weight:800;color:#fff;background:var(--herb);padding:1px 7px;border-radius:6px;display:inline-block;margin:1px 2px;">['+mm+':'+ss+']</b>'; }
+  function mergeHls(hls){ hls=(hls||[]).slice().filter(function(h){return h && (h.e>h.s);}).sort(function(a,b){return a.s-b.s;}); var out=[]; for(var i=0;i<hls.length;i++){ var h={s:hls[i].s,e:hls[i].e}; if(out.length && h.s<=out[out.length-1].e){ out[out.length-1].e=Math.max(out[out.length-1].e,h.e); } else out.push(h); } return out; }
+  function renderRichText(text, hls){
+    text=String(text==null?'':text);
+    var merged=mergeHls(hls);
+    var ts=[]; var re=/\[(\d{1,2}):(\d{2})\]/g, m; while((m=re.exec(text))){ ts.push({s:m.index,e:m.index+m[0].length,mm:m[1],ss:m[2]}); }
+    var pts={}; pts[0]=1; pts[text.length]=1;
+    var i; for(i=0;i<merged.length;i++){ pts[merged[i].s]=1; pts[merged[i].e]=1; }
+    for(i=0;i<ts.length;i++){ pts[ts[i].s]=1; pts[ts[i].e]=1; }
+    var arr=Object.keys(pts).map(Number).sort(function(a,b){return a-b;});
+    function hidx(pos){ for(var k=0;k<merged.length;k++){ if(pos>=merged[k].s && pos<merged[k].e) return k; } return -1; }
+    function tsAt(pos){ for(var k=0;k<ts.length;k++){ if(ts[k].s===pos) return ts[k]; } return null; }
+    var out='';
+    for(var a=0;a<arr.length-1;a++){ var s=arr[a], e=arr[a+1]; if(e<=s) continue; var t=tsAt(s), piece, hi=hidx(s); if(t && t.e===e){ piece=tsChipHtml(t.mm,t.ss); } else { piece=esc(text.slice(s,e)); } if(hi>=0){ piece='<mark class="hl" data-hi="'+hi+'">'+piece+'</mark>'; } out+=piece; }
+    return out;
+  }
+  function rangeOffsets(container, range){
+    try{ if(!container.contains(range.startContainer)||!container.contains(range.endContainer)) return null;
+      var pre=range.cloneRange(); pre.selectNodeContents(container); pre.setEnd(range.startContainer, range.startOffset);
+      var s=pre.toString().length; var len=range.toString().length; if(len<=0) return null; return {s:s, e:s+len};
+    }catch(e){ return null; }
+  }
+  var activeSel=null;
+  document.addEventListener('selectionchange', function(){
+    var sel=window.getSelection(); if(!sel||!sel.rangeCount) return;
+    var range=sel.getRangeAt(0); if(range.collapsed) return;
+    var node=range.commonAncestorContainer; var el=node.nodeType===1?node:node.parentNode;
+    var target=(el&&el.closest)?el.closest('.hl-target'):null; if(!target) return;
+    var off=rangeOffsets(target, range); if(off) activeSel={ id:target.getAttribute('data-hlid'), s:off.s, e:off.e };
+  });
+  function doHighlight(id, getList, setList, rerender){
+    if(!activeSel || activeSel.id!==id){ toast('Select some words first, then tap Highlight.'); return; }
+    var list=mergeHls((getList()||[]).concat([{s:activeSel.s, e:activeSel.e}]));
+    setList(list); activeSel=null; rerender();
+  }
+  function wireMarks(container, getList, setList, rerender){
+    var marks=container.querySelectorAll('mark.hl');
+    for(var i=0;i<marks.length;i++){ (function(mk){ mk.onclick=function(ev){ ev.stopPropagation(); var hi=parseInt(mk.getAttribute('data-hi'),10); var list=(getList()||[]).slice(); if(hi>=0 && hi<list.length){ list.splice(hi,1); setList(list); rerender(); } }; })(marks[i]); }
+  }
+
   function renderNotes(){
     var wrap=document.getElementById('notesList'); wrap.innerHTML='';
     readBars=[];
@@ -770,8 +812,15 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
         // FULL NOTES column
         var notesCol=document.createElement('div'); notesCol.style.cssText='flex:1 1 320px;min-width:0;';
         var nLbl=document.createElement('span'); nLbl.className='lbl'; nLbl.textContent='Full notes';
-        var body=document.createElement('div'); body.className='readtext'; body.style.marginTop='6px'; body.innerHTML=tsBold(n.text);
+        var body=document.createElement('div'); body.className='readtext hl-target'; body.setAttribute('data-hlid', n.id); body.style.marginTop='6px'; body.innerHTML=renderRichText(n.text, n.highlights);
+        wireMarks(body, function(){ return n.highlights; }, function(l){ n.highlights=l; saveNotes(); }, renderNotes);
         notesCol.appendChild(nLbl); notesCol.appendChild(body);
+        var hlRow=document.createElement('div'); hlRow.className='row'; hlRow.style.marginTop='6px';
+        var hlBtn=document.createElement('button'); hlBtn.className='btn ghost small'; hlBtn.textContent='🖍 Highlight';
+        hlBtn.onclick=function(){ doHighlight(n.id, function(){ return n.highlights; }, function(l){ n.highlights=l; saveNotes(); }, renderNotes); };
+        hlRow.appendChild(hlBtn);
+        if(n.highlights && n.highlights.length){ var hlClear=document.createElement('button'); hlClear.className='btn ghost small'; hlClear.textContent='Clear highlights'; hlClear.onclick=function(){ n.highlights=[]; saveNotes(); renderNotes(); }; hlRow.appendChild(hlClear); }
+        notesCol.appendChild(hlRow);
         notesCol.appendChild(makeReadBar(function(){ return displayTitle(n)+'. '+n.text; }));
         if(n.hasAudio){
           var aw=document.createElement('div'); aw.style.marginTop='12px';
@@ -782,7 +831,7 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
           adel.onclick=function(){ if(!window.confirm('Delete just the recording audio? Your written notes stay.'))return; audioDel(n.id).then(function(){ n.hasAudio=false; saveNotes(); renderNotes(); }); };
           aw.appendChild(albl); aw.appendChild(au); aw.appendChild(adel); notesCol.appendChild(aw);
           var chips=body.querySelectorAll('.ts-chip');
-          for(var ci=0; ci<chips.length; ci++){ (function(chip){ chip.style.cursor='pointer'; chip.title='Tap to hear this part'; chip.onclick=function(){ var sec=parseFloat(chip.getAttribute('data-sec'))||0; try{ au.currentTime=sec; var pr=au.play(); if(pr&&pr.catch)pr.catch(function(){}); }catch(e){} aw.scrollIntoView({behavior:'smooth',block:'nearest'}); }; })(chips[ci]); }
+          for(var ci=0; ci<chips.length; ci++){ (function(chip){ chip.style.cursor='pointer'; chip.title='Tap to hear this part'; chip.onclick=function(ev){ if(ev&&ev.stopPropagation) ev.stopPropagation(); var sec=parseFloat(chip.getAttribute('data-sec'))||0; try{ au.currentTime=sec; var pr=au.play(); if(pr&&pr.catch)pr.catch(function(){}); }catch(e){} aw.scrollIntoView({behavior:'smooth',block:'nearest'}); }; })(chips[ci]); }
         }
         twoCol.appendChild(notesCol);
 
@@ -1622,8 +1671,19 @@ button:focus-visible,.opt:focus-visible{outline:3px solid var(--amber);outline-o
     }).catch(function(){ oBox.innerHTML='<div class="hint" style="margin-top:6px;">(Could not load the document.)</div>'; });
     var hCol=document.createElement('div'); hCol.style.cssText='flex:1 1 340px;min-width:0;';
     var hL=document.createElement('span'); hL.className='lbl'; hL.textContent=(it.mode==='check')?'Feedback on your work':'How to do this task';
-    var hB=document.createElement('div'); hB.className='readtext'; hB.style.cssText='margin-top:6px;background:#fbf6ea;border-radius:12px;padding:12px 14px;'; hB.textContent=cwGetHelp(it);
-    hCol.appendChild(hL); hCol.appendChild(hB); hCol.appendChild(makeReadBar(function(){ return cwGetHelp(it); }));
+    var hlid='cwh_'+it.id+'_'+it.mode;
+    function cwHl(){ if(!it.hlByMode) it.hlByMode={}; return it.hlByMode[it.mode]||[]; }
+    function cwSetHl(l){ if(!it.hlByMode) it.hlByMode={}; it.hlByMode[it.mode]=l; saveCoursework(); }
+    var hB=document.createElement('div'); hB.className='readtext hl-target'; hB.setAttribute('data-hlid', hlid); hB.style.cssText='margin-top:6px;background:#fbf6ea;border-radius:12px;padding:12px 14px;'; hB.innerHTML=renderRichText(cwGetHelp(it), cwHl());
+    wireMarks(hB, cwHl, cwSetHl, renderCoursework);
+    hCol.appendChild(hL); hCol.appendChild(hB);
+    var chlRow=document.createElement('div'); chlRow.className='row'; chlRow.style.marginTop='6px';
+    var chlBtn=document.createElement('button'); chlBtn.className='btn ghost small'; chlBtn.textContent='🖍 Highlight';
+    chlBtn.onclick=function(){ doHighlight(hlid, cwHl, cwSetHl, renderCoursework); };
+    chlRow.appendChild(chlBtn);
+    if(cwHl().length){ var chlClear=document.createElement('button'); chlClear.className='btn ghost small'; chlClear.textContent='Clear highlights'; chlClear.onclick=function(){ cwSetHl([]); renderCoursework(); }; chlRow.appendChild(chlClear); }
+    hCol.appendChild(chlRow);
+    hCol.appendChild(makeReadBar(function(){ return cwGetHelp(it); }));
     two.appendChild(oCol); two.appendChild(hCol);
     return two;
   }
