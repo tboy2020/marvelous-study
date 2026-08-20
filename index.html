@@ -872,8 +872,8 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   function renderNotes(){ renderColl(NOTES); }
   var recipes = load('sl_recipes', []);
   function saveRecipes(){ save('sl_recipes', recipes); }
-  var RECIPES={ get:function(){return recipes;}, save:saveRecipes, wrapId:'recipesList', searchId:'recipeSearch', expanded:expandedRc, editId:null, kind:'recipe',
-    empty:'No recipes yet. Add one above — type it, or tap 🎤 Talk and say it.', fullLabel:'Full recipe', delMsg:'Delete this recipe?' };
+  var RECIPES={ get:function(){return recipes;}, save:saveRecipes, wrapId:'recipesList', searchId:'recipeSearch', expanded:expandedRc, editId:null, kind:'recipe', origKey:'rco_',
+    empty:'No recipes yet. Add one above — type it, tap 🎤 Talk, or upload a recipe.', fullLabel:'Full recipe', delMsg:'Delete this recipe?' };
   function renderRecipes(){ renderColl(RECIPES); }
   function renderColl(C){
     var wrap=document.getElementById(C.wrapId); if(!wrap) return; wrap.innerHTML='';
@@ -909,11 +909,30 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
         var twoCol=document.createElement('div'); twoCol.style.cssText='display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;';
         var notesCol=document.createElement('div'); notesCol.style.cssText='flex:1 1 320px;min-width:0;';
         var nLbl=document.createElement('span'); nLbl.className='lbl'; nLbl.textContent=C.fullLabel;
+        if(n.origKind){
+          notesCol.appendChild(nLbl);
+          var oBox=document.createElement('div'); oBox.innerHTML='<div class="hint" style="margin-top:6px;">Loading your document…</div>'; notesCol.appendChild(oBox);
+          (function(nn, box, col){
+            audioGet((C.origKey||'orig_')+nn.id).then(function(blob){
+              if(!blob){ box.innerHTML='<div class="hint" style="margin-top:6px;">(Document not saved on this device.)</div>'; return; }
+              if(nn.origKind==='html'){ (blob.text?blob.text():new Response(blob).text()).then(function(html){
+                  renderOrig(box,{kind:'html',html:html});
+                  var doc=box.querySelector('.cw-doc');
+                  if(doc){ doc.classList.add('hl-target'); doc.setAttribute('data-hlid', nn.id); applyHighlightsToDom(doc, nn.highlights); wireMarks(doc, function(){return nn.highlights;}, function(l){nn.highlights=l; C.save();}, function(){renderColl(C);}); }
+                  var otext=htmlToText(html); if(otext) col.appendChild(makeReadBar(function(){ return otext; }));
+                  col.appendChild(highlightBar(nn.id, function(){return nn.highlights;}, function(l){nn.highlights=l; C.save();}, function(){renderColl(C);}));
+                }); }
+              else if(nn.origKind==='pdf'){ renderOrig(box,{kind:'pdf',url:URL.createObjectURL(blob)}); }
+              else { renderOrig(box,{kind:'image',url:URL.createObjectURL(blob)}); }
+            }).catch(function(){ box.innerHTML='<div class="hint" style="margin-top:6px;">(Could not load the document.)</div>'; });
+          })(n, oBox, notesCol);
+        } else {
         var body=document.createElement('div'); body.className='readtext hl-target'; body.setAttribute('data-hlid', n.id); body.style.marginTop='6px'; body.innerHTML=renderRichText(n.text, n.highlights);
         wireMarks(body, function(){ return n.highlights; }, function(l){ n.highlights=l; C.save(); }, function(){renderColl(C);});
         notesCol.appendChild(nLbl); notesCol.appendChild(body);
         notesCol.appendChild(highlightBar(n.id, function(){ return n.highlights; }, function(l){ n.highlights=l; C.save(); }, function(){renderColl(C);}));
         notesCol.appendChild(makeReadBar(function(){ return displayTitle(n)+'. '+n.text; }));
+        }
         if(n.hasAudio){
           var aw=document.createElement('div'); aw.style.marginTop='12px';
           var albl=document.createElement('div'); albl.className='meta'; albl.textContent='🎧 Your recording — tap a green time to jump to that moment';
@@ -958,7 +977,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
           .then(function(txt){ n.summary=txt; C.save(); renderColl(C); })
           .catch(function(e){ toast(e.message||'Could not summarise.'); sum.disabled=false; sum.textContent='✨ Summarise'; });
         };
-        del.onclick=function(){ if(!window.confirm(C.delMsg)) return; if(n.hasAudio) audioDel(n.id); var a=C.get(); var idx=a.indexOf(n); if(idx>=0) a.splice(idx,1); delete C.expanded[n.id]; C.save(); renderColl(C); };
+        del.onclick=function(){ if(!window.confirm(C.delMsg)) return; if(n.hasAudio) audioDel(n.id); if(n.origKind) audioDel((C.origKey||'orig_')+n.id); var a=C.get(); var idx=a.indexOf(n); if(idx>=0) a.splice(idx,1); delete C.expanded[n.id]; C.save(); renderColl(C); };
       }
       wrap.appendChild(card);
     })(arr[i]); }
@@ -1116,26 +1135,36 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   document.getElementById('rcSave').onclick=function(){
     var t=document.getElementById('rcText').value.trim();
     if(!t){ toast('Write the recipe first.'); return; }
-    addRecipe(document.getElementById('rcTitle').value.trim(), t, document.getElementById('rcHeading').value.trim());
+    var r=addRecipe(document.getElementById('rcTitle').value.trim(), t, document.getElementById('rcHeading').value.trim());
+    if(rcPending){ r.origKind=rcPending.kind; saveRecipes(); audioPut('rco_'+r.id, rcPending.blob).then(function(){ renderRecipes(); }).catch(function(){}); rcPending=null; }
     document.getElementById('rcTitle').value=''; document.getElementById('rcText').value=''; document.getElementById('rcHeading').value=''; document.getElementById('rcTalkStatus').textContent='';
     toast('Recipe saved.');
   };
-  document.getElementById('rcClear').onclick=function(){ document.getElementById('rcTitle').value=''; document.getElementById('rcText').value=''; document.getElementById('rcHeading').value=''; document.getElementById('rcTalkStatus').textContent=''; };
+  var rcPending=null;
+  document.getElementById('rcClear').onclick=function(){ rcPending=null; document.getElementById('rcTitle').value=''; document.getElementById('rcText').value=''; document.getElementById('rcHeading').value=''; document.getElementById('rcTalkStatus').textContent=''; };
   document.getElementById('rcUpload').onclick=function(){ if(!getKey()){ needKey(); return; } document.getElementById('rcFile').click(); };
   document.getElementById('rcFile').onchange=function(){
     var file=this.files[0]; if(!file) return; this.value='';
     var st=document.getElementById('rcTalkStatus'); st.textContent='Reading your recipe…';
     var isDocx=/\.docx$/i.test(file.name||'')||file.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
     var isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name||'');
-    function fill(text){ text=(text||'').trim(); if(!text){ st.textContent='Could not read anything from that file.'; return; } var ta=document.getElementById('rcText'); ta.value=(ta.value?ta.value.replace(/\s*$/,'')+'\n\n':'')+text; var ti=document.getElementById('rcTitle'); if(!ti.value.trim()){ ti.value=(file.name||'Recipe').replace(/\.[^.]+$/,''); } st.textContent='Added. Check it, then tap Save recipe.'; }
+    function setTitleFrom(){ var ti=document.getElementById('rcTitle'); if(!ti.value.trim()){ ti.value=(file.name||'Recipe').replace(/\.[^.]+$/,''); } }
     if(isDocx){
-      loadMammoth().then(function(){ return file.arrayBuffer(); }).then(function(ab){ return window.mammoth.extractRawText({arrayBuffer:ab}); })
-        .then(function(r){ fill((r&&r.value)||''); }).catch(function(){ st.textContent='Could not read the Word file.'; });
+      loadMammoth().then(function(){ return file.arrayBuffer(); }).then(function(ab){
+        return Promise.all([ window.mammoth.extractRawText({arrayBuffer:ab}), window.mammoth.convertToHtml({arrayBuffer:ab}) ]);
+      }).then(function(both){
+        var text=((both[0]&&both[0].value)||'').trim(); var html=((both[1]&&both[1].value)||'').trim();
+        if(!text){ st.textContent='The Word file looked empty.'; return; }
+        rcPending={ kind:'html', blob:new Blob([html],{type:'text/html'}), text:text };
+        document.getElementById('rcText').value=text; setTitleFrom();
+        st.textContent='Recipe kept with its formatting. Add a heading, then Save recipe.';
+      }).catch(function(){ st.textContent='Could not read the Word file.'; });
       return;
     }
-    var sys='You read a recipe from a document or photo. Write out the recipe text — the name, the ingredients, and the steps — as faithfully as you can, in plain text. Return only the recipe, no extra comments.';
+    var sys='You read a recipe from a document or photo. Write out the recipe text — the name, ingredients, and steps — as faithfully as you can, in plain text. Return only the recipe, no extra comments.';
     fileToB64(file).then(function(b64){ var block=isPdf?{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}}:{type:'image',source:{type:'base64',media_type:mediaType(file),data:b64}}; return claude({ system:sys, max_tokens:1500, messages:[{role:'user', content:[block, {type:'text', text:'Please write out this recipe.'}]}] }); })
-      .then(function(txt){ fill(txt); }).catch(function(){ st.textContent='Could not read that file. Try a clear photo.'; });
+      .then(function(txt){ txt=(txt||'').trim(); rcPending={ kind:(isPdf?'pdf':'image'), blob:file, text:txt }; document.getElementById('rcText').value=txt; setTitleFrom(); st.textContent='Recipe kept with the original. Add a heading, then Save recipe.'; })
+      .catch(function(){ st.textContent='Could not read that file. Try a clear photo.'; });
   };
   (function(){ var s=document.getElementById('recipeSearch'); if(s) s.addEventListener('input', function(){ renderRecipes(); }); })();
   document.getElementById('saveNote').onclick=function(){
