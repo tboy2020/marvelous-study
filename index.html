@@ -147,6 +147,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     <button class="tab" data-tab="record">Record</button>
     <button class="tab" data-tab="ask">Ask for Help</button>
     <button class="tab" data-tab="coursework">Coursework</button>
+    <button class="tab" data-tab="recipes">Recipes</button>
     <button class="tab" data-tab="videos">Videos</button>
     <button class="tab" data-tab="settings">Settings</button>
   </div>
@@ -273,6 +274,37 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     <div id="cwResult"></div>
     <div style="font-family:'Saira Condensed',sans-serif;text-transform:uppercase;letter-spacing:1px;font-size:16px;color:var(--herb);font-weight:700;margin:22px 0 4px;border-bottom:2px solid #e7ddc9;padding-bottom:4px;">Your saved coursework</div>
     <div id="cwList"></div>
+  </section>
+
+  <!-- RECIPES -->
+  <section class="panel" id="p-recipes">
+    <p class="eyebrow">Your recipe book</p>
+    <h2 class="title">Recipes</h2>
+    <p class="lead">Save your recipes here in one place. Add one — type it or tap <b>🎤 Talk</b> and say it. Give it a <b>Heading</b> (like Starters or Mains) to keep them in groups, then listen back, highlight, or get a simple version.</p>
+    <div class="card">
+      <label class="k" for="rcTitle">Recipe name</label>
+      <div style="display:flex;gap:8px;align-items:stretch;">
+        <input type="text" id="rcTitle" placeholder="e.g. Jollof Rice" style="flex:1;">
+        <button class="btn tomato" id="rcTalkTitle" data-label="🎤" title="Talk the name" style="flex:0 0 auto;padding:0 14px;">🎤</button>
+      </div>
+      <label class="k" for="rcHeading">Heading — put it in a group (optional)</label>
+      <div style="display:flex;gap:8px;align-items:stretch;">
+        <input type="text" id="rcHeading" list="headingList" placeholder="e.g. Mains, Desserts, Street Food…" autocomplete="off" style="flex:1;">
+        <button class="btn tomato" id="rcTalkHeading" data-label="🎤" style="flex:0 0 auto;padding:0 14px;">🎤</button>
+      </div>
+      <label class="k" for="rcText">The recipe — ingredients and steps</label>
+      <textarea id="rcText" placeholder="Type it, or tap 🎤 Talk and say the ingredients and steps…" style="min-height:160px;"></textarea>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn tomato" id="rcTalkText" data-label="🎤 Talk">🎤 Talk</button>
+        <span id="rcTalkStatus" class="hint"></span>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <button class="btn primary" id="rcSave">Save recipe</button>
+        <button class="btn ghost" id="rcClear">Clear</button>
+      </div>
+    </div>
+    <input type="text" id="recipeSearch" placeholder="🔍 Search your recipes…" style="margin-top:8px;">
+    <div id="recipesList"></div>
   </section>
 
   <!-- VIDEOS -->
@@ -784,28 +816,34 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     Object.keys(perNode).forEach(function(k){ var node=nodes[+k]; var wraps=perNode[k].sort(function(a,b){return b.s-a.s;}); wraps.forEach(function(w){ try{ var r=document.createRange(); r.setStart(node, w.s); r.setEnd(node, w.e); var mk=document.createElement('mark'); mk.className='hl'; mk.setAttribute('data-hi', w.hi); mk.style.background=w.c; r.surroundContents(mk); }catch(e){} }); });
   }
 
-  function renderNotes(){
-    var wrap=document.getElementById('notesList'); wrap.innerHTML='';
+  var expandedRc={};
+  var NOTES={ get:function(){return notes;}, save:saveNotes, wrapId:'notesList', searchId:'noteSearch', expanded:expanded, editId:null, kind:'note',
+    empty:'No notes yet. Write one above, or use Snap a Page or Record to make one.', fullLabel:'Full notes', delMsg:'Delete this note?' };
+  function renderNotes(){ renderColl(NOTES); }
+  var recipes = load('sl_recipes', []);
+  function saveRecipes(){ save('sl_recipes', recipes); }
+  var RECIPES={ get:function(){return recipes;}, save:saveRecipes, wrapId:'recipesList', searchId:'recipeSearch', expanded:expandedRc, editId:null, kind:'recipe',
+    empty:'No recipes yet. Add one above — type it, or tap 🎤 Talk and say it.', fullLabel:'Full recipe', delMsg:'Delete this recipe?' };
+  function renderRecipes(){ renderColl(RECIPES); }
+  function renderColl(C){
+    var wrap=document.getElementById(C.wrapId); if(!wrap) return; wrap.innerHTML='';
     readBars=[];
-    var q=(document.getElementById('noteSearch').value||'').trim().toLowerCase();
-    var list=notes;
-    if(q){ list=notes.filter(function(n){ return (displayTitle(n)+' '+(n.text||'')+' '+(n.heading||'')).toLowerCase().indexOf(q)>=0; }); }
-    if(!notes.length){ wrap.innerHTML='<p class="empty">No notes yet. Write one above, or use Snap a Page or Record to make one.</p>'; return; }
-    if(!list.length){ wrap.innerHTML='<p class="empty">No notes match "'+q+'".</p>'; return; }
+    var items=C.get();
+    var q=(document.getElementById(C.searchId).value||'').trim().toLowerCase();
+    var list=items;
+    if(q){ list=items.filter(function(n){ return (displayTitle(n)+' '+(n.text||'')+' '+(n.heading||'')).toLowerCase().indexOf(q)>=0; }); }
+    if(!items.length){ wrap.innerHTML='<p class="empty">'+C.empty+'</p>'; return; }
+    if(!list.length){ wrap.innerHTML='<p class="empty">Nothing matches "'+esc(q)+'".</p>'; return; }
     refreshHeadingDatalist();
-    // group by heading (unfiled last)
     var groups={}, order=[];
     for(var gi=0; gi<list.length; gi++){ var hn=(list[gi].heading||'').trim(); var key=hn||'\u0000'; if(!groups[key]){ groups[key]=[]; order.push(key); } groups[key].push(list[gi]); }
     order.sort(function(a,b){ if(a==='\u0000') return 1; if(b==='\u0000') return -1; return 0; });
-    var lastKey=null;
     for(var oi=0; oi<order.length; oi++){ var gk=order[oi]; var arr=groups[gk];
       if(!q){ var title=(gk==='\u0000')?'📝 Unfiled':('📁 '+gk); var hd=document.createElement('div'); hd.style.cssText='font-family:Saira Condensed,sans-serif;text-transform:uppercase;letter-spacing:1px;font-size:16px;color:var(--herb);font-weight:700;margin:20px 0 8px;border-bottom:2px solid #e7ddc9;padding-bottom:4px;'; hd.textContent=title+'  ('+arr.length+')'; wrap.appendChild(hd); }
     for(var i=0;i<arr.length;i++){ (function(n){
-      if(n.id===editingId){ wrap.appendChild(editCard(n)); return; }
-      var open = !!expanded[n.id];
+      if(n.id===C.editId){ wrap.appendChild(editCardColl(C, n)); return; }
+      var open = !!C.expanded[n.id];
       var card=document.createElement('div'); card.className='card note-item';
-
-      // collapsible header
       var head=document.createElement('div'); head.style.cssText='display:flex;align-items:flex-start;gap:10px;cursor:pointer;';
       var ic=document.createElement('div'); ic.textContent=noteIcon(n); ic.style.cssText='font-size:22px;line-height:1.2;flex:0 0 auto;';
       var mid=document.createElement('div'); mid.style.cssText='flex:1;min-width:0;';
@@ -815,19 +853,16 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
       if(!open){ var pv=document.createElement('div'); pv.className='readtext'; pv.style.cssText='font-size:15px;color:var(--ink-soft);margin-top:4px;white-space:normal;'; pv.textContent=preview(n.text); mid.appendChild(pv); }
       var chev=document.createElement('div'); chev.textContent=open?'▲':'▼'; chev.style.cssText='color:var(--ink-soft);flex:0 0 auto;font-size:13px;margin-top:4px;';
       head.appendChild(ic); head.appendChild(mid); head.appendChild(chev);
-      head.onclick=function(){ if(open){ delete expanded[n.id]; } else { expanded[n.id]=true; } renderNotes(); };
+      head.onclick=function(){ if(open){ delete C.expanded[n.id]; } else { C.expanded[n.id]=true; } renderColl(C); };
       card.appendChild(head);
-
       if(open){
         var twoCol=document.createElement('div'); twoCol.style.cssText='display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;';
-
-        // FULL NOTES column
         var notesCol=document.createElement('div'); notesCol.style.cssText='flex:1 1 320px;min-width:0;';
-        var nLbl=document.createElement('span'); nLbl.className='lbl'; nLbl.textContent='Full notes';
+        var nLbl=document.createElement('span'); nLbl.className='lbl'; nLbl.textContent=C.fullLabel;
         var body=document.createElement('div'); body.className='readtext hl-target'; body.setAttribute('data-hlid', n.id); body.style.marginTop='6px'; body.innerHTML=renderRichText(n.text, n.highlights);
-        wireMarks(body, function(){ return n.highlights; }, function(l){ n.highlights=l; saveNotes(); }, renderNotes);
+        wireMarks(body, function(){ return n.highlights; }, function(l){ n.highlights=l; C.save(); }, function(){renderColl(C);});
         notesCol.appendChild(nLbl); notesCol.appendChild(body);
-        notesCol.appendChild(highlightBar(n.id, function(){ return n.highlights; }, function(l){ n.highlights=l; saveNotes(); }, renderNotes));
+        notesCol.appendChild(highlightBar(n.id, function(){ return n.highlights; }, function(l){ n.highlights=l; C.save(); }, function(){renderColl(C);}));
         notesCol.appendChild(makeReadBar(function(){ return displayTitle(n)+'. '+n.text; }));
         if(n.hasAudio){
           var aw=document.createElement('div'); aw.style.marginTop='12px';
@@ -835,26 +870,23 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
           var au=document.createElement('audio'); au.controls=true; au.preload='metadata'; au.style.cssText='width:100%;margin-top:6px;';
           audioGet(n.id).then(function(blob){ if(blob){ au.src=URL.createObjectURL(blob); } else { albl.textContent='🎧 Recording not found on this device.'; } });
           var adel=document.createElement('button'); adel.className='btn ghost small'; adel.style.marginTop='6px'; adel.textContent='🗑 Delete audio (keep notes)';
-          adel.onclick=function(){ if(!window.confirm('Delete just the recording audio? Your written notes stay.'))return; audioDel(n.id).then(function(){ n.hasAudio=false; saveNotes(); renderNotes(); }); };
+          adel.onclick=function(){ if(!window.confirm('Delete just the recording audio? Your written notes stay.'))return; audioDel(n.id).then(function(){ n.hasAudio=false; C.save(); renderColl(C); }); };
           aw.appendChild(albl); aw.appendChild(au); aw.appendChild(adel); notesCol.appendChild(aw);
           var chips=body.querySelectorAll('.ts-chip');
           for(var ci=0; ci<chips.length; ci++){ (function(chip){ chip.style.cursor='pointer'; chip.title='Tap to hear this part'; chip.onclick=function(ev){ if(ev&&ev.stopPropagation) ev.stopPropagation(); var sec=parseFloat(chip.getAttribute('data-sec'))||0; try{ au.currentTime=sec; var pr=au.play(); if(pr&&pr.catch)pr.catch(function(){}); }catch(e){} aw.scrollIntoView({behavior:'smooth',block:'nearest'}); }; })(chips[ci]); }
         }
         twoCol.appendChild(notesCol);
-
-        // SIMPLE SUMMARY column (only when a summary exists)
         if(n.summary){
           var sumCol=document.createElement('div'); sumCol.style.cssText='flex:1 1 320px;min-width:0;';
           var sLbl=document.createElement('span'); sLbl.className='lbl'; sLbl.textContent='Simple summary';
           var sBody=document.createElement('div'); sBody.className='readtext hl-target'; sBody.setAttribute('data-hlid','sum_'+n.id); sBody.style.cssText='margin-top:6px;font-size:19px;background:#fbf6ea;border-radius:12px;padding:12px 14px;'; sBody.innerHTML=renderRichText(n.summary, n.hlSummary);
-          wireMarks(sBody, function(){ return n.hlSummary; }, function(l){ n.hlSummary=l; saveNotes(); }, renderNotes);
+          wireMarks(sBody, function(){ return n.hlSummary; }, function(l){ n.hlSummary=l; C.save(); }, function(){renderColl(C);});
           sumCol.appendChild(sLbl); sumCol.appendChild(sBody);
-          sumCol.appendChild(highlightBar('sum_'+n.id, function(){ return n.hlSummary; }, function(l){ n.hlSummary=l; saveNotes(); }, renderNotes));
+          sumCol.appendChild(highlightBar('sum_'+n.id, function(){ return n.hlSummary; }, function(l){ n.hlSummary=l; C.save(); }, function(){renderColl(C);}));
           sumCol.appendChild(makeReadBar(function(){ return n.summary; }));
           twoCol.appendChild(sumCol);
         }
         card.appendChild(twoCol);
-
         var actions=document.createElement('div'); actions.className='row'; actions.style.marginTop='12px';
         var watch=document.createElement('button'); watch.className='btn amber small'; watch.textContent='🎬 Watch & Learn';
         var slides=document.createElement('button'); slides.className='btn amber small'; slides.textContent='🖼 Slides';
@@ -863,24 +895,24 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
         var edit=document.createElement('button'); edit.className='btn ghost small'; edit.textContent='✏️ Edit';
         var del=document.createElement('button'); del.className='btn ghost small'; del.textContent='🗑 Delete';
         actions.appendChild(watch); actions.appendChild(slides); actions.appendChild(stick); actions.appendChild(sum); actions.appendChild(edit); actions.appendChild(del); card.appendChild(actions);
-        watch.onclick=function(){ startWatchLearn(n); };
-        slides.onclick=function(){ openDeck(n); };
-        stick.onclick=function(){ openStickers(n); };
-        edit.onclick=function(){ stopSpeak(); editingId=n.id; renderNotes(); };
+        watch.onclick=function(){ startWatchLearn(n, C.save); };
+        slides.onclick=function(){ openDeck(n, C.save); };
+        stick.onclick=function(){ openStickers(n, C.save); };
+        edit.onclick=function(){ stopSpeak(); C.editId=n.id; renderColl(C); };
         sum.onclick=function(){
           if(!getKey()){ needKey(); return; }
           sum.disabled=true; sum.textContent='Working…';
-          claude({ system:'You are helping a 16-year-old student with dyslexia. Summarise the notes into short, simple points using plain words and short sentences. Keep it accurate. Do not use markdown, asterisks, hash signs, or emojis. Start a new line for each point. You may use a short plain heading followed by a colon.', messages:[{role:'user',content:'Summarise these notes:\n\n'+n.text}], max_tokens:700 })
-          .then(function(txt){ n.summary=txt; saveNotes(); renderNotes(); })
+          claude({ system:'You are helping a 16-year-old student with dyslexia. Summarise this into short, simple points using plain words and short sentences. Keep it accurate. Do not use markdown, asterisks, hash signs, or emojis. Start a new line for each point. You may use a short plain heading followed by a colon.', messages:[{role:'user',content:'Summarise this:\n\n'+n.text}], max_tokens:700 })
+          .then(function(txt){ n.summary=txt; C.save(); renderColl(C); })
           .catch(function(e){ toast(e.message||'Could not summarise.'); sum.disabled=false; sum.textContent='✨ Summarise'; });
         };
-        del.onclick=function(){ if(!window.confirm('Delete this note?')) return; if(n.hasAudio) audioDel(n.id); notes=notes.filter(function(x){return x.id!==n.id;}); delete expanded[n.id]; saveNotes(); renderNotes(); };
+        del.onclick=function(){ if(!window.confirm(C.delMsg)) return; if(n.hasAudio) audioDel(n.id); var a=C.get(); var idx=a.indexOf(n); if(idx>=0) a.splice(idx,1); delete C.expanded[n.id]; C.save(); renderColl(C); };
       }
       wrap.appendChild(card);
     })(arr[i]); }
     }
   }
-  function editCard(n){
+  function editCardColl(C, n){
     var card=document.createElement('div'); card.className='card note-item';
     function micRow(input, label){
       var wrap=document.createElement('div'); wrap.style.cssText='display:flex;gap:8px;align-items:stretch;';
@@ -895,7 +927,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     var lh=document.createElement('label'); lh.className='k'; lh.textContent='Heading — group (optional)';
     var hi=document.createElement('input'); hi.type='text'; hi.value=n.heading||''; hi.setAttribute('list','headingList'); hi.placeholder='e.g. Food Safety';
     var hiRow=micRow(hi,'the heading');
-    var l2=document.createElement('label'); l2.className='k'; l2.textContent='Note';
+    var l2=document.createElement('label'); l2.className='k'; l2.textContent=(C.kind==='recipe')?'Recipe':'Note';
     var ta=document.createElement('textarea'); ta.value=n.text||'';
     var estat=document.createElement('span'); estat.className='hint';
     var taRow=document.createElement('div'); taRow.className='row'; taRow.style.marginTop='8px';
@@ -909,13 +941,13 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     wireTalk(tiRow.mic, ti, estat); wireTalk(hiRow.mic, hi, estat); wireTalk(taMic, ta, estat);
     save.onclick=function(){
       var newText=ta.value.trim();
-      if(!newText){ toast('The note cannot be empty.'); return; }
+      if(!newText){ toast('It cannot be empty.'); return; }
       var changed = (newText!==n.text) || (ti.value.trim()!==(n.title||''));
       n.title=ti.value.trim(); n.text=newText; n.heading=hi.value.trim(); n.ts=Date.now();
-      if(changed && n.summary){ n.summary=''; } // old summary no longer matches — clear it
-      editingId=null; saveNotes(); refreshHeadingDatalist(); renderNotes(); toast('Note updated.');
+      if(changed && n.summary){ n.summary=''; }
+      C.editId=null; C.save(); refreshHeadingDatalist(); renderColl(C); toast('Updated.');
     };
-    cancel.onclick=function(){ editingId=null; renderNotes(); };
+    cancel.onclick=function(){ C.editId=null; renderColl(C); };
     setTimeout(function(){ ta.focus(); }, 30);
     return card;
   }
@@ -973,7 +1005,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   wireTalk(document.getElementById('talkHeading'), document.getElementById('noteHeading'), document.getElementById('talkNoteStatus'));
   wireTalk(document.getElementById('talkNote'), document.getElementById('noteText'), document.getElementById('talkNoteStatus'));
 
-  function headingsList(){ var set={}, out=[]; for(var i=0;i<notes.length;i++){ var h=(notes[i].heading||'').trim(); if(h && !set[h]){ set[h]=1; out.push(h); } } return out; }
+  function headingsList(){ var set={}, out=[]; function add(arr){ if(!arr) return; for(var i=0;i<arr.length;i++){ var h=(arr[i].heading||'').trim(); if(h && !set[h]){ set[h]=1; out.push(h); } } } add(notes); add(recipes); return out; }
   function refreshHeadingDatalist(){ var dl=document.getElementById('headingList'); if(!dl) return; dl.innerHTML=''; var hs=headingsList(); for(var i=0;i<hs.length;i++){ var o=document.createElement('option'); o.value=hs[i]; dl.appendChild(o); } }
 
   function addNote(title, text, heading){
@@ -1018,6 +1050,26 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   wireTalk(document.getElementById('smTalkHeading'), document.getElementById('smHeading'), document.getElementById('smTalkStatus'));
   wireTalk(document.getElementById('smTalkText'), document.getElementById('smText'), document.getElementById('smTalkStatus'));
   (function(){ var s=document.getElementById('noteSearch'); if(s) s.addEventListener('input', function(){ renderNotes(); }); })();
+
+  /* ---- Recipes compose ---- */
+  function addRecipe(title, text, heading){
+    var t=(title||'').trim(); if(!t){ var d=deriveTitle(text); t=d||'Recipe'; }
+    var r={ id:'r'+Date.now(), title:t, text:text||'', summary:'', heading:(heading||'').trim(), ts:Date.now() };
+    recipes.unshift(r); saveRecipes(); refreshHeadingDatalist(); renderRecipes();
+    return r;
+  }
+  wireTalk(document.getElementById('rcTalkTitle'), document.getElementById('rcTitle'), document.getElementById('rcTalkStatus'));
+  wireTalk(document.getElementById('rcTalkHeading'), document.getElementById('rcHeading'), document.getElementById('rcTalkStatus'));
+  wireTalk(document.getElementById('rcTalkText'), document.getElementById('rcText'), document.getElementById('rcTalkStatus'));
+  document.getElementById('rcSave').onclick=function(){
+    var t=document.getElementById('rcText').value.trim();
+    if(!t){ toast('Write the recipe first.'); return; }
+    addRecipe(document.getElementById('rcTitle').value.trim(), t, document.getElementById('rcHeading').value.trim());
+    document.getElementById('rcTitle').value=''; document.getElementById('rcText').value=''; document.getElementById('rcHeading').value=''; document.getElementById('rcTalkStatus').textContent='';
+    toast('Recipe saved.');
+  };
+  document.getElementById('rcClear').onclick=function(){ document.getElementById('rcTitle').value=''; document.getElementById('rcText').value=''; document.getElementById('rcHeading').value=''; document.getElementById('rcTalkStatus').textContent=''; };
+  (function(){ var s=document.getElementById('recipeSearch'); if(s) s.addEventListener('input', function(){ renderRecipes(); }); })();
   document.getElementById('saveNote').onclick=function(){
     var t=document.getElementById('noteText').value.trim();
     if(!t){ toast('Write something first.'); return; }
@@ -1388,8 +1440,9 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
         return obj;
       });
   }
-  function startWatchLearn(lesson){
+  function startWatchLearn(lesson, saveFn){
     if(!getKey()){ needKey(); return; }
+    saveFn=saveFn||saveNotes;
     wl.lesson=lesson;
     var wlEl=document.getElementById('wl'); wlEl.style.display='flex';
     document.getElementById('wlCheck').style.display='none';
@@ -1397,7 +1450,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     document.getElementById('wlLine').textContent='Getting your lesson ready…';
     document.getElementById('wlSay').textContent=''; document.getElementById('wlImgWrap').textContent='📘'; document.getElementById('wlCredit').textContent='';
     document.getElementById('wlCount').textContent='';
-    var go=function(obj){ wl.slides=obj.slides; wl.concepts=obj.concepts||[]; lesson.script=obj; saveNotes(); wl.paused=false; wl.playing=true; wl.visSlide=-1; wl.scrubbing=false; buildTimeline(); seekUI(); playFrom(0); };
+    var go=function(obj){ wl.slides=obj.slides; wl.concepts=obj.concepts||[]; lesson.script=obj; saveFn(); wl.paused=false; wl.playing=true; wl.visSlide=-1; wl.scrubbing=false; buildTimeline(); seekUI(); playFrom(0); };
     if(lesson.script && lesson.script.slides){ go(lesson.script); }
     else { buildScript(lesson).then(go).catch(function(e){ toast('Could not build the lesson. Try again.'); closeWL(); }); }
   }
@@ -1806,16 +1859,17 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
 
   /* ---------- SLIDES (she flips them herself) ---------- */
   var dk={slides:[], i:0, auto:false};
-  function ensureScript(lesson){
+  function ensureScript(lesson, saveFn){
+    saveFn=saveFn||saveNotes;
     if(lesson.script && lesson.script.slides) return Promise.resolve(lesson.script);
-    return buildScript(lesson).then(function(obj){ lesson.script=obj; saveNotes(); return obj; });
+    return buildScript(lesson).then(function(obj){ lesson.script=obj; saveFn(); return obj; });
   }
-  function openDeck(lesson){
+  function openDeck(lesson, saveFn){
     if(!getKey()){ needKey(); return; }
     var el=document.getElementById('deck'); el.style.display='flex';
     document.getElementById('dkLine').textContent='Making your slides…';
     document.getElementById('dkSay').textContent=''; document.getElementById('dkImgWrap').innerHTML='🖼️'; document.getElementById('dkCredit').textContent=''; document.getElementById('dkCount').textContent='';
-    ensureScript(lesson).then(function(obj){ dk.slides=obj.slides; dk.i=0; dk.auto=false; renderDeck(); setDkPlay(); })
+    ensureScript(lesson, saveFn).then(function(obj){ dk.slides=obj.slides; dk.i=0; dk.auto=false; renderDeck(); setDkPlay(); })
       .catch(function(){ toast('Could not build slides. Try again.'); closeDeck(); });
   }
   function renderDeck(){
@@ -1896,8 +1950,9 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     ['#D6E9FF','#173f66'],['#F3E0FF','#4b2366'],['#FFE0D0','#6b3416'],
     ['#E0FFF7','#0f5548'],['#FFF3C4','#5c4a05']
   ];
-  var sxLesson=null;
-  function openStickers(lesson){
+  var sxLesson=null, sxSave=saveNotes;
+  function openStickers(lesson, saveFn){
+    sxSave=saveFn||saveNotes;
     if(lesson.stickers && lesson.stickers.length){ sxLesson=lesson; renderStickers(); return; }
     if(!getKey()){ needKey(); return; }
     var el=document.getElementById('stix'); el.style.display='flex';
@@ -1911,7 +1966,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
       if(a>=0&&b>=0) clean=clean.slice(a,b+1);
       var obj=JSON.parse(clean);
       if(!obj.stickers||!obj.stickers.length) throw new Error('empty');
-      lesson.stickers=obj.stickers; saveNotes();
+      lesson.stickers=obj.stickers; sxSave();
       sxLesson=lesson; renderStickers();
     }).catch(function(){ toast('Could not make stickers. Try again.'); closeStickers(); });
   }
@@ -2052,7 +2107,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
 
   document.addEventListener('visibilitychange', function(){ if(document.hidden) stopSpeak(); });
 
-  applySettings(); renderNotes(); renderChat(); renderVideos(); renderCoursework();
+  applySettings(); renderNotes(); renderChat(); renderVideos(); renderCoursework(); renderRecipes();
 
   /* ---- whole-canvas zoom (increase/decrease at will) ---- */
   var zoom = parseFloat(localStorage.getItem('sl_zoom')||'1'); if(isNaN(zoom)) zoom=1;
