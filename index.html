@@ -522,30 +522,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
 /* ---- PIN lock (set on first use, then required each open) ---- */
 (function(){
   function gp(){ try{ return localStorage.getItem('sl_pin')||''; }catch(e){ return ''; } }
-  var lock=document.getElementById('lock'), pin=document.getElementById('lockPin'),
-      go=document.getElementById('lockGo'), msg=document.getElementById('lockMsg'), setNote=document.getElementById('lockSet');
-  var existing=gp();
-  var settingNew = !existing;
-  var firstEntry=null;
-  if(settingNew){ msg.textContent='Create a code for this app'; setNote.textContent='Pick a code (e.g. 4 digits). You will type it each time you open Study Lab. Write it somewhere safe — it cannot be recovered.'; }
-  function unlock(){ lock.style.display='none'; document.body.style.overflow=''; }
-  function shake(t){ msg.textContent=t; pin.value=''; pin.focus(); }
-  function submit(){
-    var v=(pin.value||'').trim();
-    if(v.length<4){ shake('Use at least 4 numbers'); return; }
-    if(settingNew){
-      if(firstEntry===null){ firstEntry=v; pin.value=''; msg.textContent='Type it once more to confirm'; setNote.textContent=''; return; }
-      if(v!==firstEntry){ firstEntry=null; msg.textContent='Create a code for this app'; shake('They did not match. Try again'); return; }
-      try{ localStorage.setItem('sl_pin', v); }catch(e){}
-      unlock();
-      return;
-    }
-    if(v===existing){ unlock(); } else { shake('Wrong code. Try again'); }
-  }
-  go.onclick=submit;
-  pin.addEventListener('keydown', function(e){ if(e.key==='Enter') submit(); });
-  document.body.style.overflow='hidden';
-  setTimeout(function(){ pin.focus(); }, 200);
+  (function(){ var lock=document.getElementById('lock'); if(lock) lock.parentNode.removeChild(lock); document.body.style.overflow=''; })();
 })();
 </script>
 <script>
