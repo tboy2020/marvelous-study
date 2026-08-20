@@ -300,6 +300,8 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
         <button class="btn tomato" id="rcTalkText" data-label="🎤 Talk">🎤 Talk</button>
         <span id="rcTalkStatus" class="hint"></span>
       </div>
+      <input type="file" id="rcFile" accept="image/*,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none;">
+      <button class="btn amber block" id="rcUpload" style="margin-top:10px;">📄 Upload a recipe (Word, PDF, or photo)</button>
       <div class="row" style="margin-top:12px;">
         <button class="btn primary" id="rcSave">Save recipe</button>
         <button class="btn ghost" id="rcClear">Clear</button>
@@ -1136,6 +1138,22 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     toast('Recipe saved.');
   };
   document.getElementById('rcClear').onclick=function(){ document.getElementById('rcTitle').value=''; document.getElementById('rcText').value=''; document.getElementById('rcHeading').value=''; document.getElementById('rcTalkStatus').textContent=''; };
+  document.getElementById('rcUpload').onclick=function(){ if(!getKey()){ needKey(); return; } document.getElementById('rcFile').click(); };
+  document.getElementById('rcFile').onchange=function(){
+    var file=this.files[0]; if(!file) return; this.value='';
+    var st=document.getElementById('rcTalkStatus'); st.textContent='Reading your recipe…';
+    var isDocx=/\.docx$/i.test(file.name||'')||file.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    var isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name||'');
+    function fill(text){ text=(text||'').trim(); if(!text){ st.textContent='Could not read anything from that file.'; return; } var ta=document.getElementById('rcText'); ta.value=(ta.value?ta.value.replace(/\s*$/,'')+'\n\n':'')+text; var ti=document.getElementById('rcTitle'); if(!ti.value.trim()){ ti.value=(file.name||'Recipe').replace(/\.[^.]+$/,''); } st.textContent='Added. Check it, then tap Save recipe.'; }
+    if(isDocx){
+      loadMammoth().then(function(){ return file.arrayBuffer(); }).then(function(ab){ return window.mammoth.extractRawText({arrayBuffer:ab}); })
+        .then(function(r){ fill((r&&r.value)||''); }).catch(function(){ st.textContent='Could not read the Word file.'; });
+      return;
+    }
+    var sys='You read a recipe from a document or photo. Write out the recipe text — the name, the ingredients, and the steps — as faithfully as you can, in plain text. Return only the recipe, no extra comments.';
+    fileToB64(file).then(function(b64){ var block=isPdf?{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}}:{type:'image',source:{type:'base64',media_type:mediaType(file),data:b64}}; return claude({ system:sys, max_tokens:1500, messages:[{role:'user', content:[block, {type:'text', text:'Please write out this recipe.'}]}] }); })
+      .then(function(txt){ fill(txt); }).catch(function(){ st.textContent='Could not read that file. Try a clear photo.'; });
+  };
   (function(){ var s=document.getElementById('recipeSearch'); if(s) s.addEventListener('input', function(){ renderRecipes(); }); })();
   document.getElementById('saveNote').onclick=function(){
     var t=document.getElementById('noteText').value.trim();
