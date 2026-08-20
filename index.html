@@ -2228,27 +2228,32 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     }
   })();
   function isDocKey(k){ k=String(k); return k.indexOf('cwo_')===0 || k.indexOf('rco_')===0; }
+  function audioGetKeys(){ if(!IDB_OK) return Promise.resolve([]); return adb().then(function(db){ return new Promise(function(res){ var out=[]; var store=db.transaction('audio','readonly').objectStore('audio'); var rq=store.openKeyCursor?store.openKeyCursor():store.openCursor(); rq.onsuccess=function(e){ var cur=e.target.result; if(cur){ out.push(cur.key); cur.continue(); } else { res(out); } }; rq.onerror=function(){ res(out); }; }); }).catch(function(){ return []; }); }
   function backupData(){
     toast('Preparing your backup…');
     var local={}; for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k && k.indexOf('sl_')===0) local[k]=localStorage.getItem(k); }
-    audioGetAll().then(function(items){
-      var docs=[], audioCount=0;
-      for(var j=0;j<items.length;j++){ if(isDocKey(items[j].key)) docs.push(items[j]); else audioCount++; }
-      if(window.showSaveFilePicker){ return streamBackup(local, docs, audioCount); }
-      return downloadBackup(local, docs, audioCount);
+    audioGetKeys().then(function(keys){
+      var docKeys=[], audioCount=0;
+      for(var j=0;j<keys.length;j++){ if(isDocKey(keys[j])) docKeys.push(keys[j]); else audioCount++; }
+      if(window.showSaveFilePicker){ return streamBackup(local, docKeys, audioCount); }
+      return downloadBackup(local, docKeys, audioCount);
     }).catch(function(e){ if(e && (e.name==='AbortError'||e.code===20)){ return; } toast('Could not finish the backup. Try again.'); });
   }
-  function streamBackup(local, docs, audioCount){
+  function streamBackup(local, docKeys, audioCount){
     var name='studylab-backup-'+new Date().toISOString().slice(0,10)+'.json';
     return window.showSaveFilePicker({ suggestedName:name, types:[{description:'Study Lab backup', accept:{'application/json':['.json']}}] })
       .then(function(handle){ return handle.createWritable(); })
       .then(function(w){
         return w.write('{"_app":"studylab","_v":3,"_at":'+JSON.stringify(new Date().toISOString())+',"local":'+JSON.stringify(local)+',"idb":{')
           .then(function(){
-            var i=0;
+            var i=0, wrote=0;
             function next(){
-              if(i>=docs.length) return w.write('}}');
-              return blobToDataURL(docs[i].blob).then(function(d){ return w.write((i?',':'')+JSON.stringify(String(docs[i].key))+':'+JSON.stringify(d)); }).then(function(){ i++; return next(); });
+              if(i>=docKeys.length) return w.write('}}');
+              var key=docKeys[i];
+              return audioGet(key).then(function(blob){
+                if(!blob){ i++; return next(); }
+                return blobToDataURL(blob).then(function(d){ var piece=(wrote?',':'')+JSON.stringify(String(key))+':'+JSON.stringify(d); wrote++; d=null; return w.write(piece); }).then(function(){ i++; return next(); });
+              });
             }
             return next();
           })
@@ -2259,9 +2264,9 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
         toast('✅ Backup saved to your folder.'+(audioCount?' (Recordings will sync with the cloud later.)':''));
       });
   }
-  function downloadBackup(local, docs, audioCount){
+  function downloadBackup(local, docKeys, audioCount){
     var chain=Promise.resolve(); var idb={};
-    docs.forEach(function(it){ chain=chain.then(function(){ return blobToDataURL(it.blob).then(function(d){ idb[String(it.key)]=d; }).catch(function(){}); }); });
+    docKeys.forEach(function(key){ chain=chain.then(function(){ return audioGet(key).then(function(blob){ if(blob) return blobToDataURL(blob).then(function(d){ idb[String(key)]=d; }); }).catch(function(){}); }); });
     return chain.then(function(){
       var dump={ _app:'studylab', _v:3, _at:new Date().toISOString(), local:local, idb:idb };
       var blob=new Blob([JSON.stringify(dump)], {type:'application/json'});
