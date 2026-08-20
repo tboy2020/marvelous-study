@@ -305,7 +305,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
         <input type="file" id="restoreInput" accept="application/json,.json" style="display:none;">
         <button class="btn amber" id="restoreBtn">⬆ Restore from a backup</button>
       </div>
-      <p class="hint" style="margin-top:8px;">(The written notes and summaries are saved. Raw recording audio is too large to include — but the timestamped transcripts are.) <b id="lastBackupInfo"></b></p>
+      <p class="hint" style="margin-top:8px;">This saves <b>everything</b> — her notes, highlights, coursework, the original documents and the recordings. Big recordings make the file larger, so it is smart to keep the file in Google Drive or OneDrive. <b id="lastBackupInfo"></b></p>
     </div>
 
     <div class="card">
@@ -2098,15 +2098,25 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     }
   })();
   function backupData(){
-    var dump={ _app:'studylab', _v:1, _at:new Date().toISOString() };
+    toast('Preparing your backup…');
+    var dump={ _app:'studylab', _v:2, _at:new Date().toISOString() };
     for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k && k.indexOf('sl_')===0) dump[k]=localStorage.getItem(k); }
-    var blob=new Blob([JSON.stringify(dump)], {type:'application/json'});
-    var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-    a.download='studylab-backup-'+new Date().toISOString().slice(0,10)+'.json'; document.body.appendChild(a); a.click(); a.remove();
-    localStorage.setItem('sl_lastBackup', String(Date.now()));
-    hideBackupBanner(); updateBackupInfo();
-    toast('Backup saved. Keep it safe (email it to yourself).');
+    audioGetAll().then(function(items){
+      var chain=Promise.resolve(); var idb={};
+      items.forEach(function(it){ chain=chain.then(function(){ return blobToDataURL(it.blob).then(function(d){ idb[String(it.key)]=d; }).catch(function(){}); }); });
+      return chain.then(function(){ dump.idb=idb; });
+    }).then(function(){
+      var blob=new Blob([JSON.stringify(dump)], {type:'application/json'});
+      var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+      a.download='studylab-backup-'+new Date().toISOString().slice(0,10)+'.json'; document.body.appendChild(a); a.click(); a.remove();
+      localStorage.setItem('sl_lastBackup', String(Date.now()));
+      hideBackupBanner(); updateBackupInfo();
+      var mb=blob.size/1048576; toast('Backup saved ('+(mb<1?(Math.round(blob.size/1024)+' KB'):(mb.toFixed(1)+' MB'))+'). Keep it safe.');
+    }).catch(function(){ toast('Could not finish the backup. Try again.'); });
   }
+  function audioGetAll(){ if(!IDB_OK) return Promise.resolve([]); return adb().then(function(db){ return new Promise(function(res){ var out=[]; var tx=db.transaction('audio','readonly'); var rq=tx.objectStore('audio').openCursor(); rq.onsuccess=function(e){ var cur=e.target.result; if(cur){ out.push({key:cur.key, blob:cur.value}); cur.continue(); } else { res(out); } }; rq.onerror=function(){ res(out); }; }); }).catch(function(){ return []; }); }
+  function blobToDataURL(blob){ return new Promise(function(res,rej){ var r=new FileReader(); r.onload=function(){ res(r.result); }; r.onerror=function(){ rej(r.error); }; r.readAsDataURL(blob); }); }
+  function dataURLToBlob(dataURL){ try{ var parts=dataURL.split(','); var mime=(parts[0].match(/:(.*?);/)||[])[1]||'application/octet-stream'; var bin=atob(parts[1]); var arr=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i); return new Blob([arr],{type:mime}); }catch(e){ return null; } }
   function lastBackup(){ return parseInt(localStorage.getItem('sl_lastBackup')||'0',10); }
   function bkSnooze(){ return parseInt(localStorage.getItem('sl_bkSnooze')||'0',10); }
   function agoText(ts){ if(!ts) return 'never'; var s=Math.floor((Date.now()-ts)/1000); if(s<60) return 'just now'; var m=Math.floor(s/60); if(m<60) return m+' min ago'; var h=Math.floor(m/60); if(h<24) return h+' hr ago'; var d=Math.floor(h/24); return d+' day'+(d>1?'s':'')+' ago'; }
@@ -2126,10 +2136,15 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
       try{
         var obj=JSON.parse(r.result);
         if(!obj || obj._app!=='studylab'){ toast('That does not look like a Study Lab backup.'); return; }
-        if(!window.confirm('Restore this backup? It will replace what is on this device now with the saved notes.')) return;
+        if(!window.confirm('Restore this backup? It will replace what is on this device now with the saved work.')) return;
         var n=0; for(var k in obj){ if(obj.hasOwnProperty(k) && k.indexOf('sl_')===0){ localStorage.setItem(k, obj[k]); n++; } }
-        toast('Restored '+n+' items. Reloading…');
-        setTimeout(function(){ location.reload(); }, 900);
+        var idb=obj.idb||{}; var keys=Object.keys(idb);
+        if(!keys.length){ toast('Restored '+n+' items. Reloading…'); setTimeout(function(){ location.reload(); }, 900); return; }
+        toast('Restoring '+n+' items and '+keys.length+' files…');
+        var chain=Promise.resolve();
+        keys.forEach(function(key){ chain=chain.then(function(){ var b=dataURLToBlob(idb[key]); if(b) return audioPut(key, b); }); });
+        chain.then(function(){ toast('Restored everything. Reloading…'); setTimeout(function(){ location.reload(); }, 1000); })
+             .catch(function(){ toast('Restored notes; some files could not be restored.'); setTimeout(function(){ location.reload(); }, 1200); });
       }catch(e){ toast('Could not read that backup file.'); }
     };
     r.readAsText(f);
