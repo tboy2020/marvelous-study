@@ -148,6 +148,8 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     <button class="tab" data-tab="ask">Ask for Help</button>
     <button class="tab" data-tab="coursework">Coursework</button>
     <button class="tab" data-tab="recipes">Recipes</button>
+    <button class="tab" data-tab="cook">Cook &amp; Learn</button>
+    <button class="tab" data-tab="caterer">Caterer Path</button>
     <button class="tab" data-tab="videos">Videos</button>
     <button class="tab" data-tab="settings">Settings</button>
   </div>
@@ -305,6 +307,22 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     </div>
     <input type="text" id="recipeSearch" placeholder="🔍 Search your recipes…" style="margin-top:8px;">
     <div id="recipesList"></div>
+  </section>
+
+  <!-- COOK & LEARN (embedded) -->
+  <section class="panel" id="p-cook">
+    <p class="eyebrow">Reading &amp; catering</p>
+    <h2 class="title">Cook &amp; Learn</h2>
+    <p class="lead">Read-along recipes, food-safety practice, your Hospitality &amp; Catering topics, and the story of Jamie Oliver.</p>
+    <iframe data-src="https://tboy2020.github.io/marvelous-reader/" title="Cook and Learn" style="width:100%;height:80vh;min-height:520px;border:1px solid var(--line);border-radius:14px;background:#fff;"></iframe>
+  </section>
+
+  <!-- CATERER PATH (embedded) -->
+  <section class="panel" id="p-caterer">
+    <p class="eyebrow">Your future</p>
+    <h2 class="title">Marvelous the Professional Caterer</h2>
+    <p class="lead">Your journey from student to professional caterer — the steps, skills, and where your path can take you.</p>
+    <iframe data-src="https://tboy2020.github.io/marvelous-catering-roadmap/" title="Caterer Path" style="width:100%;height:80vh;min-height:520px;border:1px solid var(--line);border-radius:14px;background:#fff;"></iframe>
   </section>
 
   <!-- VIDEOS -->
@@ -482,6 +500,19 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   <div id="sxBody" style="flex:1;overflow:auto;padding:6px 16px calc(24px + env(safe-area-inset-bottom,0));">
     <div id="sxGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;max-width:820px;margin:0 auto;"></div>
     <div id="sxBoard" style="display:none;position:relative;width:100%;min-height:1000px;max-width:900px;margin:0 auto;"></div>
+  </div>
+</div>
+
+<!-- TRANSLATE modal -->
+<div id="trModal" style="display:none;position:fixed;inset:0;z-index:150;background:rgba(20,16,15,.55);align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px 14px;">
+  <div style="background:var(--cream,#F7F1E3);color:var(--ink,#2b2622);width:100%;max-width:640px;border-radius:18px;padding:20px;box-shadow:0 12px 40px rgba(0,0,0,.35);">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="font-family:'Saira Condensed',sans-serif;text-transform:uppercase;letter-spacing:.6px;font-size:22px;color:var(--herb);">🌍 Translate</div>
+      <button id="trClose" style="margin-left:auto;background:rgba(0,0,0,.08);border:none;font-size:20px;width:38px;height:38px;border-radius:10px;cursor:pointer;">✕</button>
+    </div>
+    <p class="hint" style="margin-top:2px;">Pick a language and I will translate it. You can listen to it too.</p>
+    <div class="opts" id="trLangs" style="flex-wrap:wrap;"></div>
+    <div id="trResult" style="margin-top:14px;"></div>
   </div>
 </div>
 
@@ -816,6 +847,40 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     Object.keys(perNode).forEach(function(k){ var node=nodes[+k]; var wraps=perNode[k].sort(function(a,b){return b.s-a.s;}); wraps.forEach(function(w){ try{ var r=document.createRange(); r.setStart(node, w.s); r.setEnd(node, w.e); var mk=document.createElement('mark'); mk.className='hl'; mk.setAttribute('data-hi', w.hi); mk.style.background=w.c; r.surroundContents(mk); }catch(e){} }); });
   }
 
+  /* ---- Translate (any note/recipe/transcript → another language) ---- */
+  var TR_LANGS=[['Spanish','es'],['French','fr'],['Portuguese','pt'],['German','de'],['Italian','it'],['Yoruba','yo'],['Arabic','ar'],['Chinese','zh'],['English','en']];
+  var _trText='';
+  function speakLang(text, lang){
+    try{ synth.cancel(); }catch(e){}
+    var u=new SpeechSynthesisUtterance(cleanSpeech(text)); u.lang=lang;
+    var vs=synth.getVoices(); for(var i=0;i<vs.length;i++){ if(vs[i].lang && vs[i].lang.toLowerCase().indexOf(lang.toLowerCase())===0){ u.voice=vs[i]; break; } }
+    u.rate=settings.rate; try{ synth.speak(u); }catch(e){}
+  }
+  function openTranslate(text){
+    _trText=text||'';
+    document.getElementById('trResult').innerHTML='';
+    var box=document.getElementById('trLangs'); box.innerHTML='';
+    TR_LANGS.forEach(function(L){ var b=document.createElement('button'); b.className='opt'; b.textContent=L[0]; b.onclick=function(){ doTranslate(L[0], L[1]); }; box.appendChild(b); });
+    document.getElementById('trModal').style.display='flex';
+  }
+  function doTranslate(name, code){
+    if(!getKey()){ needKey(); return; }
+    var res=document.getElementById('trResult'); res.innerHTML='<p class="hint">Translating into '+name+'…</p>';
+    claude({ system:'You are a translator for a 16-year-old student. Translate the text the user sends into '+name+'. Keep it clear and simple, keep the meaning, keep line breaks. Return ONLY the translation, nothing else — no notes, no explanation.', messages:[{role:'user', content:_trText}], max_tokens:1600 })
+    .then(function(out){
+      res.innerHTML='';
+      var lbl=document.createElement('span'); lbl.className='lbl'; lbl.textContent='In '+name;
+      var body=document.createElement('div'); body.className='readtext'; body.style.cssText='margin-top:6px;background:#fff;border:1px solid #e7ddc9;border-radius:12px;padding:12px 14px;'; body.textContent=out;
+      var row=document.createElement('div'); row.className='row'; row.style.marginTop='10px';
+      var read=document.createElement('button'); read.className='btn amber small'; read.textContent='🔊 Read in '+name; read.onclick=function(){ speakLang(out, code); };
+      var stop=document.createElement('button'); stop.className='btn ghost small'; stop.textContent='■ Stop'; stop.onclick=function(){ stopSpeak(); };
+      var copy=document.createElement('button'); copy.className='btn ghost small'; copy.textContent='Copy'; copy.onclick=function(){ try{ navigator.clipboard.writeText(out); toast('Copied.'); }catch(e){} };
+      row.appendChild(read); row.appendChild(stop); row.appendChild(copy);
+      res.appendChild(lbl); res.appendChild(body); res.appendChild(row);
+    }).catch(function(e){ res.innerHTML='<p class="hint">Could not translate. Try again.</p>'; });
+  }
+  document.getElementById('trClose').onclick=function(){ stopSpeak(); document.getElementById('trModal').style.display='none'; };
+
   var expandedRc={};
   var NOTES={ get:function(){return notes;}, save:saveNotes, wrapId:'notesList', searchId:'noteSearch', expanded:expanded, editId:null, kind:'note',
     empty:'No notes yet. Write one above, or use Snap a Page or Record to make one.', fullLabel:'Full notes', delMsg:'Delete this note?' };
@@ -892,12 +957,14 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
         var slides=document.createElement('button'); slides.className='btn amber small'; slides.textContent='🖼 Slides';
         var stick=document.createElement('button'); stick.className='btn amber small'; stick.textContent='🌈 Stickers';
         var sum=document.createElement('button'); sum.className='btn primary small'; sum.textContent=n.summary?'✨ Re-summarise':'✨ Summarise';
+        var tr=document.createElement('button'); tr.className='btn ghost small'; tr.textContent='🌍 Translate';
         var edit=document.createElement('button'); edit.className='btn ghost small'; edit.textContent='✏️ Edit';
         var del=document.createElement('button'); del.className='btn ghost small'; del.textContent='🗑 Delete';
-        actions.appendChild(watch); actions.appendChild(slides); actions.appendChild(stick); actions.appendChild(sum); actions.appendChild(edit); actions.appendChild(del); card.appendChild(actions);
+        actions.appendChild(watch); actions.appendChild(slides); actions.appendChild(stick); actions.appendChild(sum); actions.appendChild(tr); actions.appendChild(edit); actions.appendChild(del); card.appendChild(actions);
         watch.onclick=function(){ startWatchLearn(n, C.save); };
         slides.onclick=function(){ openDeck(n, C.save); };
         stick.onclick=function(){ openStickers(n, C.save); };
+        tr.onclick=function(){ openTranslate(displayTitle(n)+'\n\n'+n.text); };
         edit.onclick=function(){ stopSpeak(); C.editId=n.id; renderColl(C); };
         sum.onclick=function(){
           if(!getKey()){ needKey(); return; }
@@ -2057,7 +2124,8 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     stopSpeak();
     var tabs=document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++) tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab')===name);
     var panels=document.querySelectorAll('.panel'); for(var j=0;j<panels.length;j++) panels[j].classList.remove('active');
-    document.getElementById('p-'+name).classList.add('active');
+    var panel=document.getElementById('p-'+name); panel.classList.add('active');
+    var ifr=panel.querySelector('iframe[data-src]'); if(ifr && !ifr.getAttribute('src')){ ifr.setAttribute('src', ifr.getAttribute('data-src')); }
     window.scrollTo(0,0);
   }
   document.getElementById('tabs').addEventListener('click', function(e){ if(e.target.classList.contains('tab')) switchTab(e.target.getAttribute('data-tab')); });
