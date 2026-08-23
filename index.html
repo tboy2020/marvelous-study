@@ -1218,21 +1218,27 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     function setTitleFrom(){ var ti=document.getElementById('rcTitle'); if(!ti.value.trim()){ ti.value=(file.name||'Recipe').replace(/\.[^.]+$/,''); } }
     var tooBig = file.size > MAX_ORIG;
     if(isDocx){
+      st.textContent='Reading your recipe and shrinking the pictures…';
       loadMammoth().then(function(){ return file.arrayBuffer(); }).then(function(ab){
-        if(tooBig){ return window.mammoth.extractRawText({arrayBuffer:ab}).then(function(r){ return {text:((r&&r.value)||'').trim(), html:null}; }); }
-        return Promise.all([ window.mammoth.extractRawText({arrayBuffer:ab}), window.mammoth.convertToHtml({arrayBuffer:ab}) ]).then(function(both){ return {text:((both[0]&&both[0].value)||'').trim(), html:((both[1]&&both[1].value)||'').trim()}; });
+        return Promise.all([ window.mammoth.extractRawText({arrayBuffer:ab}), window.mammoth.convertToHtml({arrayBuffer:ab}, mammothImgOpts()) ]).then(function(both){ return {text:((both[0]&&both[0].value)||'').trim(), html:((both[1]&&both[1].value)||'').trim()}; });
       }).then(function(o){
         if(!o.text){ st.textContent='The Word file looked empty.'; return; }
-        if(tooBig){ rcPending=null; document.getElementById('rcText').value=o.text; setTitleFrom(); st.textContent='This document is large, so its words are saved for reading, summarising and highlighting. Open the file itself to see the original layout.'; return; }
-        rcPending={ kind:'html', blob:new Blob([o.html],{type:'text/html'}), text:o.text };
         document.getElementById('rcText').value=o.text; setTitleFrom();
-        st.textContent='Recipe kept with its formatting. Add a heading, then Save recipe.';
+        var htmlBlob=new Blob([o.html||''],{type:'text/html'});
+        if(htmlBlob.size > MAX_ORIG){ rcPending=null; st.textContent='This document is very large even after shrinking, so its words are saved. Open the file itself to see the original.'; return; }
+        rcPending={ kind:'html', blob:htmlBlob, text:o.text };
+        st.textContent='Recipe kept with its pictures and formatting. Add a heading, then Save recipe.';
       }).catch(function(){ st.textContent='Could not read the Word file.'; });
       return;
     }
     var sys='You read a recipe from a document or photo. Write out the recipe text — the name, ingredients, and steps — as faithfully as you can, in plain text. Return only the recipe, no extra comments.';
     fileToB64(file).then(function(b64){ var block=isPdf?{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}}:{type:'image',source:{type:'base64',media_type:mediaType(file),data:b64}}; return claude({ system:sys, max_tokens:1500, messages:[{role:'user', content:[block, {type:'text', text:'Please write out this recipe.'}]}] }); })
-      .then(function(txt){ txt=(txt||'').trim(); if(tooBig){ rcPending=null; document.getElementById('rcText').value=txt; setTitleFrom(); st.textContent='This document is large, so its words are saved. Open the file itself to see the original.'; return; } rcPending={ kind:(isPdf?'pdf':'image'), blob:file, text:txt }; document.getElementById('rcText').value=txt; setTitleFrom(); st.textContent='Recipe kept with the original. Add a heading, then Save recipe.'; })
+      .then(function(txt){
+        txt=(txt||'').trim(); document.getElementById('rcText').value=txt; setTitleFrom();
+        if(isPdf){ if(tooBig){ rcPending=null; st.textContent='This PDF is large, so its words are saved. Open the file itself to see the original.'; } else { rcPending={ kind:'pdf', blob:file, text:txt }; st.textContent='Recipe kept with the original. Add a heading, then Save recipe.'; } return; }
+        // image: shrink it for storage
+        blobToDataURL(file).then(function(uri){ return downscaleDataUri(uri, 1600, 0.75); }).then(function(small){ var b=dataURLToBlob(small)||file; rcPending={ kind:'image', blob:b, text:txt }; st.textContent='Recipe kept with the photo. Add a heading, then Save recipe.'; }).catch(function(){ rcPending={ kind:'image', blob:file, text:txt }; st.textContent='Recipe kept with the photo. Add a heading, then Save recipe.'; });
+      })
       .catch(function(){ st.textContent='Could not read that file. Try a clear photo.'; });
   };
   (function(){ var s=document.getElementById('recipeSearch'); if(s) s.addEventListener('input', function(){ renderRecipes(); }); })();
@@ -1865,6 +1871,32 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     });
   }
   function loadMammoth(){ if(window.mammoth) return Promise.resolve(); return new Promise(function(res,rej){ var s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/mammoth@1/mammoth.browser.min.js'; s.onload=function(){res();}; s.onerror=function(){rej(new Error('Could not load the Word reader.'));}; document.head.appendChild(s); }); }
+  function downscaleDataUri(dataUri, maxDim, quality){
+    return new Promise(function(resolve){
+      try{
+        if(!dataUri || dataUri.length < 60000){ resolve(dataUri); return; }
+        var img=new Image();
+        img.onload=function(){
+          var w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
+          if(!w||!h){ resolve(dataUri); return; }
+          var scale=Math.min(1, maxDim/Math.max(w,h));
+          var nw=Math.max(1,Math.round(w*scale)), nh=Math.max(1,Math.round(h*scale));
+          try{ var c=document.createElement('canvas'); c.width=nw; c.height=nh; c.getContext('2d').drawImage(img,0,0,nw,nh); var out=c.toDataURL('image/jpeg', quality||0.72); resolve((out && out.length<dataUri.length)?out:dataUri); }catch(e){ resolve(dataUri); }
+        };
+        img.onerror=function(){ resolve(dataUri); };
+        img.src=dataUri;
+      }catch(e){ resolve(dataUri); }
+    });
+  }
+  function mammothImgOpts(){
+    if(!window.mammoth || !window.mammoth.images) return undefined;
+    return { convertImage: window.mammoth.images.imgElement(function(image){
+      return image.read('base64').then(function(base64){
+        var uri='data:'+(image.contentType||'image/png')+';base64,'+base64;
+        return downscaleDataUri(uri, 1400, 0.72).then(function(small){ return { src: small }; });
+      });
+    }) };
+  }
   document.getElementById('cwBtn').onclick=function(){ if(!getKey()){ needKey(); return; } cwInput.click(); };
   function docPaper(){ var d=document.createElement('div'); d.className='cw-doc'; d.style.cssText='margin-top:6px;background:#fff;border:1px solid #e7ddc9;border-radius:12px;padding:16px 18px;line-height:1.6;'; return d; }
   function renderOrig(container, orig){
@@ -1958,7 +1990,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     function fail(e){ prog.innerHTML=''; toast((e&&e.message)||'Could not read the coursework. Try a clear photo.'); }
     if(isDocx){
       loadMammoth().then(function(){ return file.arrayBuffer(); }).then(function(ab){
-        return Promise.all([ window.mammoth.extractRawText({arrayBuffer:ab}), window.mammoth.convertToHtml({arrayBuffer:ab}) ]);
+        return Promise.all([ window.mammoth.extractRawText({arrayBuffer:ab}), window.mammoth.convertToHtml({arrayBuffer:ab}, mammothImgOpts()) ]);
       }).then(function(both){
         var text=((both[0]&&both[0].value)||'').trim(); var html=((both[1]&&both[1].value)||'').trim();
         if(!text){ throw new Error('The Word file looked empty.'); }
@@ -2303,7 +2335,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
       });
     }
   })();
-  var MAX_ORIG = 8*1024*1024; /* originals bigger than this are kept as text only */
+  var MAX_ORIG = 12*1024*1024; /* originals bigger than this are kept as text only */
   function isDocKey(k){ k=String(k); return k.indexOf('cwo_')===0 || k.indexOf('rco_')===0; }
   function audioGetKeys(){ if(!IDB_OK) return Promise.resolve([]); return adb().then(function(db){ return new Promise(function(res){ var out=[]; var store=db.transaction('audio','readonly').objectStore('audio'); var rq=store.openKeyCursor?store.openKeyCursor():store.openCursor(); rq.onsuccess=function(e){ var cur=e.target.result; if(cur){ out.push(cur.key); cur.continue(); } else { res(out); } }; rq.onerror=function(){ res(out); }; }); }).catch(function(){ return []; }); }
   function freeUpSpace(){
