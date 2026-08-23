@@ -1,4 +1,4 @@
-var CACHE = 'studylab-v4';
+var CACHE = 'studylab-v5';
 var ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', function(e){
