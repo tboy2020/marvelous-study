@@ -340,6 +340,9 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
         <input type="file" id="restoreInput" accept="application/json,.json" style="display:none;">
         <button class="btn amber" id="restoreBtn">⬆ Restore from a backup</button>
       </div>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn ghost" id="freeSpaceBtn">🧹 Free up space (remove very large documents)</button>
+      </div>
       <p class="hint" style="margin-top:8px;">This saves her <b>notes, highlights, coursework and recipe documents</b> — everything except the big recording audio (its written words are still saved). When you press it, choose your <b>Downloads</b> or <b>Desktop</b> folder (these are the most reliable — you can copy the file into OneDrive afterwards). Then email the file to yourself to be safe. Recordings will sync fully once she moves to the cloud on her new device. <b id="lastBackupInfo"></b></p>
     </div>
 
@@ -978,6 +981,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
           (function(nn, box, col){
             audioGet((C.origKey||'orig_')+nn.id).then(function(blob){
               if(!blob){ box.innerHTML='<div class="hint" style="margin-top:6px;">(Document not saved on this device.)</div>'; return; }
+              if(blob.size > MAX_ORIG){ box.innerHTML='<div class="hint" style="margin-top:6px;">This document is very large, so it is not shown here. Open the file from your folder to see it. Its words are saved below.</div>'; col.appendChild(highlightBar(nn.id, function(){return nn.highlights;}, function(l){nn.highlights=l; C.save();}, function(){renderColl(C);}, function(){return nn.bolds;}, function(l){nn.bolds=l; C.save();}, function(){return nn.unders;}, function(l){nn.unders=l; C.save();})); return; }
               if(nn.origKind==='html'){ (blob.text?blob.text():new Response(blob).text()).then(function(html){
                   renderOrig(box,{kind:'html',html:html});
                   var doc=box.querySelector('.cw-doc');
@@ -1212,21 +1216,23 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     var isDocx=/\.docx$/i.test(file.name||'')||file.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
     var isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name||'');
     function setTitleFrom(){ var ti=document.getElementById('rcTitle'); if(!ti.value.trim()){ ti.value=(file.name||'Recipe').replace(/\.[^.]+$/,''); } }
+    var tooBig = file.size > MAX_ORIG;
     if(isDocx){
       loadMammoth().then(function(){ return file.arrayBuffer(); }).then(function(ab){
-        return Promise.all([ window.mammoth.extractRawText({arrayBuffer:ab}), window.mammoth.convertToHtml({arrayBuffer:ab}) ]);
-      }).then(function(both){
-        var text=((both[0]&&both[0].value)||'').trim(); var html=((both[1]&&both[1].value)||'').trim();
-        if(!text){ st.textContent='The Word file looked empty.'; return; }
-        rcPending={ kind:'html', blob:new Blob([html],{type:'text/html'}), text:text };
-        document.getElementById('rcText').value=text; setTitleFrom();
+        if(tooBig){ return window.mammoth.extractRawText({arrayBuffer:ab}).then(function(r){ return {text:((r&&r.value)||'').trim(), html:null}; }); }
+        return Promise.all([ window.mammoth.extractRawText({arrayBuffer:ab}), window.mammoth.convertToHtml({arrayBuffer:ab}) ]).then(function(both){ return {text:((both[0]&&both[0].value)||'').trim(), html:((both[1]&&both[1].value)||'').trim()}; });
+      }).then(function(o){
+        if(!o.text){ st.textContent='The Word file looked empty.'; return; }
+        if(tooBig){ rcPending=null; document.getElementById('rcText').value=o.text; setTitleFrom(); st.textContent='This document is large, so its words are saved for reading, summarising and highlighting. Open the file itself to see the original layout.'; return; }
+        rcPending={ kind:'html', blob:new Blob([o.html],{type:'text/html'}), text:o.text };
+        document.getElementById('rcText').value=o.text; setTitleFrom();
         st.textContent='Recipe kept with its formatting. Add a heading, then Save recipe.';
       }).catch(function(){ st.textContent='Could not read the Word file.'; });
       return;
     }
     var sys='You read a recipe from a document or photo. Write out the recipe text — the name, ingredients, and steps — as faithfully as you can, in plain text. Return only the recipe, no extra comments.';
     fileToB64(file).then(function(b64){ var block=isPdf?{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}}:{type:'image',source:{type:'base64',media_type:mediaType(file),data:b64}}; return claude({ system:sys, max_tokens:1500, messages:[{role:'user', content:[block, {type:'text', text:'Please write out this recipe.'}]}] }); })
-      .then(function(txt){ txt=(txt||'').trim(); rcPending={ kind:(isPdf?'pdf':'image'), blob:file, text:txt }; document.getElementById('rcText').value=txt; setTitleFrom(); st.textContent='Recipe kept with the original. Add a heading, then Save recipe.'; })
+      .then(function(txt){ txt=(txt||'').trim(); if(tooBig){ rcPending=null; document.getElementById('rcText').value=txt; setTitleFrom(); st.textContent='This document is large, so its words are saved. Open the file itself to see the original.'; return; } rcPending={ kind:(isPdf?'pdf':'image'), blob:file, text:txt }; document.getElementById('rcText').value=txt; setTitleFrom(); st.textContent='Recipe kept with the original. Add a heading, then Save recipe.'; })
       .catch(function(){ st.textContent='Could not read that file. Try a clear photo.'; });
   };
   (function(){ var s=document.getElementById('recipeSearch'); if(s) s.addEventListener('input', function(){ renderRecipes(); }); })();
@@ -1889,6 +1895,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     oCol.appendChild(oL); oCol.appendChild(oBox);
     audioGet('cwo_'+it.id).then(function(blob){
       if(!blob){ oBox.innerHTML='<div class="hint" style="margin-top:6px;">(Document not saved on this device.)</div>'; return; }
+      if(blob.size > MAX_ORIG){ oBox.innerHTML='<div class="hint" style="margin-top:6px;">This document is very large, so it is not shown here. Open the file from your folder to see it.</div>'; return; }
       if(it.origKind==='html'){ (blob.text?blob.text():new Response(blob).text()).then(function(html){
         renderOrig(oBox,{kind:'html',html:html});
         var doc=oBox.querySelector('.cw-doc');
@@ -2296,8 +2303,28 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
       });
     }
   })();
+  var MAX_ORIG = 8*1024*1024; /* originals bigger than this are kept as text only */
   function isDocKey(k){ k=String(k); return k.indexOf('cwo_')===0 || k.indexOf('rco_')===0; }
   function audioGetKeys(){ if(!IDB_OK) return Promise.resolve([]); return adb().then(function(db){ return new Promise(function(res){ var out=[]; var store=db.transaction('audio','readonly').objectStore('audio'); var rq=store.openKeyCursor?store.openKeyCursor():store.openCursor(); rq.onsuccess=function(e){ var cur=e.target.result; if(cur){ out.push(cur.key); cur.continue(); } else { res(out); } }; rq.onerror=function(){ res(out); }; }); }).catch(function(){ return []; }); }
+  function freeUpSpace(){
+    if(!window.confirm('Remove the very large documents kept inside the app? Her notes, recipes and coursework WORDS all stay — only the big original files (which you still have in your folder) are cleared. This makes the app fast and stops crashes.')) return;
+    toast('Freeing up space\u2026');
+    audioGetKeys().then(function(keys){
+      var docKeys=[]; for(var i=0;i<keys.length;i++){ if(isDocKey(keys[i])) docKeys.push(keys[i]); }
+      var removed=[], chain=Promise.resolve();
+      docKeys.forEach(function(key){ chain=chain.then(function(){ return audioGet(key).then(function(blob){ if(blob && blob.size>MAX_ORIG){ removed.push(String(key)); return audioDel(key); } }).catch(function(){}); }); });
+      return chain.then(function(){ return removed; });
+    }).then(function(removed){
+      var changed=false;
+      function clearIn(arr, prefix, save){ var c=false; for(var i=0;i<arr.length;i++){ if(arr[i].origKind && removed.indexOf(prefix+arr[i].id)>=0){ delete arr[i].origKind; c=true; } } if(c) save(); return c; }
+      clearIn(recipes, 'rco_', saveRecipes);
+      clearIn(coursework, 'cwo_', saveCoursework);
+      renderRecipes(); renderCoursework();
+      if(removed.length){ toast('\u2705 Cleared '+removed.length+' large document'+(removed.length>1?'s':'')+'. The app will be faster now.'); }
+      else { toast('Nothing large to clear \u2014 you are all set.'); }
+    }).catch(function(){ toast('Could not free space. Try again.'); });
+  }
+  (function(){ var b=document.getElementById('freeSpaceBtn'); if(b) b.onclick=freeUpSpace; })();
   function backupData(){
     toast('Preparing your backup\u2026');
     var local={}; for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k && k.indexOf('sl_')===0) local[k]=localStorage.getItem(k); }
@@ -2308,10 +2335,11 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     }).catch(function(e){ if(e && (e.name==='AbortError'||e.code===20)){ return; } toast('Backup could not finish. Please try again.'); });
   }
   function backupFileName(){ return 'studylab-backup-'+new Date().toISOString().slice(0,10)+'.json'; }
-  function markBackedUp(size, audioCount, where){
+  function markBackedUp(size, audioCount, where, skipped){
     localStorage.setItem('sl_lastBackup', String(Date.now())); hideBackupBanner(); updateBackupInfo();
     var mb=size/1048576, sz=(mb<1?(Math.round(size/1024)+' KB'):(mb.toFixed(1)+' MB'));
-    toast('\u2705 Backup saved'+(where?(' to '+where):'')+' ('+sz+').'+(audioCount?' Recordings sync with the cloud later.':''));
+    var extra=''; if(audioCount) extra+=' Recordings sync with the cloud later.'; if(skipped) extra+=' '+skipped+' very large document'+(skipped>1?'s were':' was')+' left out (open those files from your folder).';
+    toast('\u2705 Backup saved'+(where?(' to '+where):'')+' ('+sz+').'+extra);
   }
   function writeBackup(local, docKeys, audioCount){
     var header='{"_app":"studylab","_v":3,"_at":'+JSON.stringify(new Date().toISOString())+',"local":'+JSON.stringify(local)+',"idb":{';
@@ -2321,34 +2349,37 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
         var writable;
         return handle.createWritable().then(function(w){ writable=w; return w.write(header); })
           .then(function(){
-            var i=0, wrote=0;
+            var i=0, wrote=0, skipped=0;
             function next(){
               if(i>=docKeys.length) return Promise.resolve();
               var key=docKeys[i];
               return audioGet(key).then(function(blob){
                 if(!blob){ i++; return next(); }
+                if(blob.size > MAX_ORIG){ skipped++; i++; return next(); }
                 return blobToDataURL(blob).then(function(d){ var piece=(wrote?',':'')+JSON.stringify(String(key))+':'+JSON.stringify(d); wrote++; d=null; return writable.write(piece); }).then(function(){ i++; return next(); });
               });
             }
-            return next();
+            return next().then(function(){ return skipped; });
           })
-          .then(function(){ return writable.write('}}'); })
-          .then(function(){ return writable.close(); })
-          .then(function(){ return handle.getFile(); })
-          .then(function(file){
+          .then(function(skipped){ return writable.write('}}').then(function(){ return skipped; }); })
+          .then(function(skipped){ return writable.close().then(function(){ return skipped; }); })
+          .then(function(skipped){ return handle.getFile().then(function(file){ return {file:file, skipped:skipped}; }); })
+          .then(function(r){
+            var file=r.file;
             if(!file || file.size < 20){ toast('\u26a0 The file saved empty. Please tap Back up again and choose your Downloads or Desktop folder (not a OneDrive folder).'); return; }
-            markBackedUp(file.size, audioCount, 'your folder');
+            markBackedUp(file.size, audioCount, 'your folder', r.skipped);
           });
       })
       .catch(function(e){ if(e && (e.name==='AbortError'||e.code===20)){ return; } toast('Could not save there. Tap Back up again and choose Downloads or Desktop.'); });
   }
   function inMemoryDownload(header, docKeys, audioCount){
-    var body=header; var i=0, wrote=0;
+    var body=header; var i=0, wrote=0, skipped=0;
     function next(){
       if(i>=docKeys.length) return Promise.resolve();
       var key=docKeys[i];
       return audioGet(key).then(function(blob){
         if(!blob){ i++; return next(); }
+        if(blob.size > MAX_ORIG){ skipped++; i++; return next(); }
         return blobToDataURL(blob).then(function(d){ body+=(wrote?',':'')+JSON.stringify(String(key))+':'+JSON.stringify(d); wrote++; d=null; i++; return next(); });
       });
     }
@@ -2357,7 +2388,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
       var blob=new Blob([body], {type:'application/json'}); var url=URL.createObjectURL(blob);
       var a=document.createElement('a'); a.href=url; a.download=backupFileName(); document.body.appendChild(a); a.click();
       setTimeout(function(){ if(a.parentNode) a.parentNode.removeChild(a); URL.revokeObjectURL(url); }, 1500);
-      markBackedUp(blob.size, audioCount, 'your Downloads folder');
+      markBackedUp(blob.size, audioCount, 'your Downloads folder', skipped);
     });
   }
   function audioGetAll(){ if(!IDB_OK) return Promise.resolve([]); return adb().then(function(db){ return new Promise(function(res){ var out=[]; var tx=db.transaction('audio','readonly'); var rq=tx.objectStore('audio').openCursor(); rq.onsuccess=function(e){ var cur=e.target.result; if(cur){ out.push({key:cur.key, blob:cur.value}); cur.continue(); } else { res(out); } }; rq.onerror=function(){ res(out); }; }); }).catch(function(){ return []; }); }
