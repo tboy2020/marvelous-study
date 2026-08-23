@@ -340,7 +340,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
         <input type="file" id="restoreInput" accept="application/json,.json" style="display:none;">
         <button class="btn amber" id="restoreBtn">⬆ Restore from a backup</button>
       </div>
-      <p class="hint" style="margin-top:8px;">This saves her <b>notes, highlights, coursework and recipe documents</b> — everything except the big recording audio (its written words are still saved). When you press it, choose the folder <b>OneDrive › Documents › Study Lab</b> and it will remember it. Recordings will sync fully once she moves to the cloud on her new device. <b id="lastBackupInfo"></b></p>
+      <p class="hint" style="margin-top:8px;">This saves her <b>notes, highlights, coursework and recipe documents</b> — everything except the big recording audio (its written words are still saved). When you press it, pick <b>OneDrive › Documents › Study Lab</b> (or it will save to your <b>Downloads</b> folder) — then email the file to yourself to be safe. Recordings will sync fully once she moves to the cloud on her new device. <b id="lastBackupInfo"></b></p>
     </div>
 
     <div class="card">
@@ -2299,50 +2299,43 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   function isDocKey(k){ k=String(k); return k.indexOf('cwo_')===0 || k.indexOf('rco_')===0; }
   function audioGetKeys(){ if(!IDB_OK) return Promise.resolve([]); return adb().then(function(db){ return new Promise(function(res){ var out=[]; var store=db.transaction('audio','readonly').objectStore('audio'); var rq=store.openKeyCursor?store.openKeyCursor():store.openCursor(); rq.onsuccess=function(e){ var cur=e.target.result; if(cur){ out.push(cur.key); cur.continue(); } else { res(out); } }; rq.onerror=function(){ res(out); }; }); }).catch(function(){ return []; }); }
   function backupData(){
-    toast('Preparing your backup…');
+    toast('Preparing your backup\u2026');
     var local={}; for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k && k.indexOf('sl_')===0) local[k]=localStorage.getItem(k); }
     audioGetKeys().then(function(keys){
       var docKeys=[], audioCount=0;
       for(var j=0;j<keys.length;j++){ if(isDocKey(keys[j])) docKeys.push(keys[j]); else audioCount++; }
-      if(window.showSaveFilePicker){ return streamBackup(local, docKeys, audioCount); }
-      return downloadBackup(local, docKeys, audioCount);
-    }).catch(function(e){ if(e && (e.name==='AbortError'||e.code===20)){ return; } toast('Could not finish the backup. Try again.'); });
-  }
-  function streamBackup(local, docKeys, audioCount){
-    var name='studylab-backup-'+new Date().toISOString().slice(0,10)+'.json';
-    return window.showSaveFilePicker({ suggestedName:name, types:[{description:'Study Lab backup', accept:{'application/json':['.json']}}] })
-      .then(function(handle){ return handle.createWritable(); })
-      .then(function(w){
-        return w.write('{"_app":"studylab","_v":3,"_at":'+JSON.stringify(new Date().toISOString())+',"local":'+JSON.stringify(local)+',"idb":{')
-          .then(function(){
-            var i=0, wrote=0;
-            function next(){
-              if(i>=docKeys.length) return w.write('}}');
-              var key=docKeys[i];
-              return audioGet(key).then(function(blob){
-                if(!blob){ i++; return next(); }
-                return blobToDataURL(blob).then(function(d){ var piece=(wrote?',':'')+JSON.stringify(String(key))+':'+JSON.stringify(d); wrote++; d=null; return w.write(piece); }).then(function(){ i++; return next(); });
-              });
-            }
-            return next();
-          })
-          .then(function(){ return w.close(); });
-      })
-      .then(function(){
-        localStorage.setItem('sl_lastBackup', String(Date.now())); hideBackupBanner(); updateBackupInfo();
-        toast('✅ Backup saved to your folder.'+(audioCount?' (Recordings will sync with the cloud later.)':''));
+      var idb={}; var chain=Promise.resolve();
+      docKeys.forEach(function(key){ chain=chain.then(function(){ return audioGet(key).then(function(blob){ if(blob) return blobToDataURL(blob).then(function(d){ idb[String(key)]=d; }); }).catch(function(){}); }); });
+      return chain.then(function(){
+        var json=JSON.stringify({ _app:'studylab', _v:3, _at:new Date().toISOString(), local:local, idb:idb });
+        return saveBackupJson(json, audioCount);
       });
+    }).catch(function(e){ toast('Backup could not finish. Please try again.'); });
   }
-  function downloadBackup(local, docKeys, audioCount){
-    var chain=Promise.resolve(); var idb={};
-    docKeys.forEach(function(key){ chain=chain.then(function(){ return audioGet(key).then(function(blob){ if(blob) return blobToDataURL(blob).then(function(d){ idb[String(key)]=d; }); }).catch(function(){}); }); });
-    return chain.then(function(){
-      var dump={ _app:'studylab', _v:3, _at:new Date().toISOString(), local:local, idb:idb };
-      var blob=new Blob([JSON.stringify(dump)], {type:'application/json'});
-      var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='studylab-backup-'+new Date().toISOString().slice(0,10)+'.json'; document.body.appendChild(a); a.click(); a.remove();
-      localStorage.setItem('sl_lastBackup', String(Date.now())); hideBackupBanner(); updateBackupInfo();
-      var mb=blob.size/1048576; toast('Backup saved ('+(mb<1?(Math.round(blob.size/1024)+' KB'):(mb.toFixed(1)+' MB'))+').'+(audioCount?' Recordings sync with the cloud later.':''));
-    });
+  function backupFileName(){ return 'studylab-backup-'+new Date().toISOString().slice(0,10)+'.json'; }
+  function downloadJson(json){
+    var blob=new Blob([json], {type:'application/json'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a'); a.href=url; a.download=backupFileName(); document.body.appendChild(a); a.click();
+    setTimeout(function(){ if(a.parentNode) a.parentNode.removeChild(a); URL.revokeObjectURL(url); }, 1500);
+    return blob.size;
+  }
+  function markBackedUp(size, audioCount, where){
+    localStorage.setItem('sl_lastBackup', String(Date.now())); hideBackupBanner(); updateBackupInfo();
+    var mb=size/1048576, sz=(mb<1?(Math.round(size/1024)+' KB'):(mb.toFixed(1)+' MB'));
+    toast('\u2705 Backup saved'+(where?(' to '+where):'')+' ('+sz+').'+(audioCount?' Recordings sync with the cloud later.':''));
+  }
+  function saveBackupJson(json, audioCount){
+    if(window.showSaveFilePicker){
+      return window.showSaveFilePicker({ suggestedName:backupFileName(), types:[{description:'Study Lab backup', accept:{'application/json':['.json']}}] })
+        .then(function(handle){
+          return handle.createWritable().then(function(w){ return w.write(json).then(function(){ return w.close(); }); })
+            .then(function(){ return handle.getFile(); })
+            .then(function(file){ if(!file || file.size < 10){ var s=downloadJson(json); markBackedUp(s, audioCount, 'your Downloads folder'); } else { markBackedUp(file.size, audioCount, 'your folder'); } });
+        })
+        .catch(function(e){ if(e && (e.name==='AbortError'||e.code===20)){ return; } var s=downloadJson(json); markBackedUp(s, audioCount, 'your Downloads folder'); });
+    }
+    var s=downloadJson(json); markBackedUp(s, audioCount, 'your Downloads folder'); return Promise.resolve();
   }
   function audioGetAll(){ if(!IDB_OK) return Promise.resolve([]); return adb().then(function(db){ return new Promise(function(res){ var out=[]; var tx=db.transaction('audio','readonly'); var rq=tx.objectStore('audio').openCursor(); rq.onsuccess=function(e){ var cur=e.target.result; if(cur){ out.push({key:cur.key, blob:cur.value}); cur.continue(); } else { res(out); } }; rq.onerror=function(){ res(out); }; }); }).catch(function(){ return []; }); }
   function blobToDataURL(blob){ return new Promise(function(res,rej){ var r=new FileReader(); r.onload=function(){ res(r.result); }; r.onerror=function(){ rej(r.error); }; r.readAsDataURL(blob); }); }
