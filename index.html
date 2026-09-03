@@ -383,7 +383,14 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     </div>
 
     <div class="card">
-      <label class="k">Anthropic API key</label>
+      <p class="eyebrow" style="margin-top:0;">What it costs</p>
+      <div style="font-family:'Saira Condensed',sans-serif;text-transform:uppercase;letter-spacing:.6px;font-size:20px;color:var(--herb);">💷 Usage &amp; cost</div>
+      <p class="hint" style="margin-top:2px;">The real cost so far on your Anthropic key, per feature, from the exact tokens each request used. Recordings use the separate Groq key and are not counted here.</p>
+      <div id="usageTable" style="margin-top:10px;overflow-x:auto;"></div>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn ghost small" id="usageReset">Reset the counter</button>
+      </div>
+    </div>
       <p class="hint">Needed for photo-to-text, summaries and the tutor. Get one at <b>console.anthropic.com</b>. It is saved only on this device, never in the app's code.</p>
       <input type="password" id="apiKey" placeholder="sk-ant-…" autocomplete="off">
       <div class="row" style="margin-top:10px;">
@@ -644,13 +651,28 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   function needKey(){ toast('Add your Anthropic key in Settings first.'); switchTab('settings'); }
 
   /* ---------- Claude call ---------- */
+  function modelRates(model){ model=model||''; if(model.indexOf('sonnet')>=0) return {i:2,o:10}; if(model.indexOf('opus')>=0) return {i:5,o:25}; return {i:1,o:5}; }
+  function recordUsage(tag, inTok, outTok, model){
+    try{
+      var u=load('sl_usage', {items:{}, since:Date.now()});
+      if(!u.items) u.items={}; if(!u.since) u.since=Date.now();
+      var r=modelRates(model);
+      var cost=(inTok/1e6)*r.i + (outTok/1e6)*r.o;
+      var key=tag||'Other';
+      if(!u.items[key]) u.items[key]={calls:0,inTok:0,outTok:0,cost:0};
+      var it=u.items[key]; it.calls++; it.inTok+=(inTok||0); it.outTok+=(outTok||0); it.cost+=cost;
+      save('sl_usage', u);
+      if(typeof updateUsageTable==='function') updateUsageTable();
+    }catch(e){}
+  }
   function claude(opts){
     var key=getKey();
     if(!key) return Promise.reject(new Error('no-key'));
+    var usedModel=opts.model||currentModel();
     return fetch("https://api.anthropic.com/v1/messages", {
       method:"POST",
       headers:{ "content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true" },
-      body: JSON.stringify({ model: opts.model||currentModel(), max_tokens: opts.max_tokens||1200, system: opts.system||undefined, messages: opts.messages })
+      body: JSON.stringify({ model: usedModel, max_tokens: opts.max_tokens||1200, system: opts.system||undefined, messages: opts.messages })
     }).then(function(res){
       return res.text().then(function(t){
         if(!res.ok){
@@ -662,6 +684,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
           throw new Error(msg);
         }
         var data=JSON.parse(t);
+        try{ if(data.usage) recordUsage(opts.tag||'Other', data.usage.input_tokens||0, data.usage.output_tokens||0, usedModel); }catch(e){}
         return (data.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('\n');
       });
     });
@@ -953,7 +976,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   function doTranslate(name, code){
     if(!getKey()){ needKey(); return; }
     var res=document.getElementById('trResult'); res.innerHTML='<p class="hint">Translating into '+name+'…</p>';
-    claude({ system:'You are a translator for a 16-year-old student. Translate the text the user sends into '+name+'. Keep it clear and simple, keep the meaning, keep line breaks. Return ONLY the translation, nothing else — no notes, no explanation.', messages:[{role:'user', content:_trText}], max_tokens:1600 })
+    claude({ system:'You are a translator for a 16-year-old student. Translate the text the user sends into '+name+'. Keep it clear and simple, keep the meaning, keep line breaks. Return ONLY the translation, nothing else — no notes, no explanation.', messages:[{role:'user', content:_trText}], max_tokens:1600, tag:'Translate' })
     .then(function(out){
       res.innerHTML='';
       var lbl=document.createElement('span'); lbl.className='lbl'; lbl.textContent='In '+name;
@@ -1076,7 +1099,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
         sum.onclick=function(){
           if(!getKey()){ needKey(); return; }
           sum.disabled=true; sum.textContent='Working…';
-          claude({ system:'You are helping a 16-year-old student with dyslexia. Summarise this into short, simple points using plain words and short sentences. Keep it accurate. Do not use markdown, asterisks, hash signs, or emojis. Start a new line for each point. You may use a short plain heading followed by a colon.', messages:[{role:'user',content:'Summarise this:\n\n'+n.text}], max_tokens:700 })
+          claude({ system:'You are helping a 16-year-old student with dyslexia. Summarise this into short, simple points using plain words and short sentences. Keep it accurate. Do not use markdown, asterisks, hash signs, or emojis. Start a new line for each point. You may use a short plain heading followed by a colon.', messages:[{role:'user',content:'Summarise this:\n\n'+n.text}], max_tokens:700, tag:'Summaries' })
           .then(function(txt){ n.summary=txt; C.save(); renderColl(C); })
           .catch(function(e){ toast(e.message||'Could not summarise.'); sum.disabled=false; sum.textContent='✨ Summarise'; });
         };
@@ -1147,7 +1170,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     return claude({
       system:'You fix speech-to-text mistakes for a UK teenager studying WJEC Hospitality and Catering who has a slight accent. Correct obvious mis-hearings and spelling so the words match what she meant. For example "cos work", "course work" or "cause work" must become "coursework"; spell catering, cooking and food-safety words correctly; fix punctuation and capitalisation. Do NOT add anything new, do NOT change her meaning, and do NOT answer or reply to her — return ONLY the corrected version of exactly what she said, nothing else.',
       messages:[{role:'user', content: raw}],
-      max_tokens: Math.min(3000, Math.ceil(raw.length/2)+120)
+      max_tokens: Math.min(3000, Math.ceil(raw.length/2)+120), tag:'Voice tidy-up'
     }).then(function(out){ var c=(out||'').trim(); return c || raw; }).catch(function(){ return raw; });
   }
 
@@ -1268,7 +1291,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
       return;
     }
     var sys='You read a recipe from a document or photo. Write out the recipe text — the name, ingredients, and steps — as faithfully as you can, in plain text. Return only the recipe, no extra comments.';
-    fileToB64(file).then(function(b64){ var block=isPdf?{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}}:{type:'image',source:{type:'base64',media_type:mediaType(file),data:b64}}; return claude({ system:sys, max_tokens:1500, messages:[{role:'user', content:[block, {type:'text', text:'Please write out this recipe.'}]}] }); })
+    fileToB64(file).then(function(b64){ var block=isPdf?{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}}:{type:'image',source:{type:'base64',media_type:mediaType(file),data:b64}}; return claude({ system:sys, max_tokens:1500, messages:[{role:'user', content:[block, {type:'text', text:'Please write out this recipe.'}]}], tag:'Recipe reading' }); })
       .then(function(txt){
         txt=(txt||'').trim(); document.getElementById('rcText').value=txt; setTitleFrom();
         if(isPdf){ if(tooBig){ rcPending=null; st.textContent='This PDF is large, so its words are saved. Open the file itself to see the original.'; } else { rcPending={ kind:'pdf', blob:file, text:txt }; st.textContent='Recipe kept with the original. Add a heading, then Save recipe.'; } return; }
@@ -1297,7 +1320,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     var img=document.createElement('img'); img.style.maxWidth='100%'; img.style.borderRadius='12px'; img.src=URL.createObjectURL(file); prev.appendChild(img);
     var prog=document.getElementById('snapProgress'); prog.innerHTML='<p class="hint">Reading the words in the photo…</p>';
     fileToB64(file).then(function(b64){
-      return claude({ max_tokens:1500, system:'You carefully read the text in an image of a page from a Hospitality and Catering textbook or worksheet. Output only the text you can see, cleanly, keeping headings and bullet points. Do not add comments.',
+      return claude({ max_tokens:1500, tag:'Snap a Page', system:'You carefully read the text in an image of a page from a Hospitality and Catering textbook or worksheet. Output only the text you can see, cleanly, keeping headings and bullet points. Do not add comments.',
         messages:[{role:'user', content:[ {type:'image', source:{type:'base64', media_type:mediaType(file), data:b64}}, {type:'text', text:'Read all the text on this page.'} ]}] });
     }).then(function(txt){
       prog.innerHTML='';
@@ -1584,7 +1607,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
       userMsg.content=content; chat.push(userMsg);
       var thinking={role:'assistant', content:'…', display:'…'}; chat.push(thinking); renderChat();
       var apiMsgs = chat.filter(function(m){return m!==thinking;}).map(function(m){ return { role:m.role, content:m.content }; });
-      return claude({ system:tutorPrompt(), messages:apiMsgs, max_tokens:(askMode==='full'?1500:1000) }).then(function(ans){
+      return claude({ system:tutorPrompt(), messages:apiMsgs, max_tokens:(askMode==='full'?1500:1000), tag:'Ask for Help' }).then(function(ans){
         chat.pop(); chat.push({role:'assistant', content:ans, display:ans, mode:askMode}); renderChat();
       });
     }).catch(function(e){
@@ -1599,7 +1622,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     var ask = (want==='simple')
       ? 'Please explain this again, but much simpler: short sentences, one idea at a time, everyday examples, fairly short. Same information, easier words.'
       : 'Please explain this again with more detail and depth: use the proper terms and explain them, add more examples, and cover it more fully. Keep it clear and readable.';
-    claude({ system:tutorPrompt(want), messages:[{role:'user', content:ask+'\n\nHere is what to re-explain:\n\n'+base}], max_tokens:(want==='full'?1500:1000) })
+    claude({ system:tutorPrompt(want), messages:[{role:'user', content:ask+'\n\nHere is what to re-explain:\n\n'+base}], max_tokens:(want==='full'?1500:1000), tag:'Ask for Help' })
     .then(function(ans){ m.content=ans; m.display=ans; m.mode=want; renderChat(); })
     .catch(function(e){ toast(e.message||'Could not redo it.'); if(btn){ btn.disabled=false; } });
   }
@@ -1638,7 +1661,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   function buildScript(lesson){
     var content=(lesson.title?lesson.title+'\n\n':'')+lesson.text+(lesson.summary?('\n\nSummary:\n'+lesson.summary):'');
     var sys='You turn a lesson into a simple picture-lesson for a 16-year-old with dyslexia studying Hospitality and Catering. Break it into 5 to 8 short steps. Return ONLY valid JSON, no markdown, in this shape: {"slides":[{"line":"very short on-screen text, max 8 words","image":"a SPECIFIC, literal video search phrase, 3 to 5 words, that clearly SHOWS this exact point using a real kitchen or food scene or action (for example: chef washing hands sink, raw chicken chopping board, fridge thermometer close up, steaming cooked rice pan). Make it directly relevant to the point, not generic.","say":"2 to 4 short simple sentences that explain this step and give a real-life example"}],"concepts":["three short main ideas to check at the end"]}. Keep language plain and kind. Every image phrase must match its point closely.';
-    return claude({ system:sys, messages:[{role:'user', content:'Make a picture-lesson from this:\n\n'+content}], max_tokens:1600, model:currentModel() })
+    return claude({ system:sys, messages:[{role:'user', content:'Make a picture-lesson from this:\n\n'+content}], max_tokens:1600, model:currentModel(), tag:'Watch & Learn / Slides' })
       .then(function(txt){
         var clean=txt.replace(/```json/gi,'').replace(/```/g,'').trim();
         var start=clean.indexOf('{'), end=clean.lastIndexOf('}');
@@ -1784,7 +1807,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   function conceptHelp(concept, container){
     container.innerHTML='<div style="opacity:.85;">Getting simpler words…</div>';
     var yt=function(q){ return 'https://www.youtube.com/results?search_query='+encodeURIComponent(q); };
-    claude({ system:'Explain to a 16-year-old with dyslexia in 2 or 3 very short, kind sentences with an everyday example.', messages:[{role:'user',content:'Explain simply: '+concept+' (in Hospitality and Catering).'}], max_tokens:250 })
+    claude({ system:'Explain to a 16-year-old with dyslexia in 2 or 3 very short, kind sentences with an everyday example.', messages:[{role:'user',content:'Explain simply: '+concept+' (in Hospitality and Catering).'}], max_tokens:250, tag:'Ask for Help' })
     .then(function(ans){
       container.innerHTML='';
       var ex=document.createElement('div'); ex.style.cssText='background:#2b2523;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:17px;line-height:1.6;'; ex.textContent=ans;
@@ -1899,10 +1922,10 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     return audioGet('cwo_'+it.id).then(function(blob){
       if(!blob) throw new Error('The original is not saved on this device, so it cannot switch here.');
       var task=cwHelpTask(mode);
-      if(it.origKind==='html'){ return (blob.text?blob.text():new Response(blob).text()).then(function(html){ var text=htmlToText(html); return claude({ system:CW_SYS, max_tokens:1500, messages:[{role:'user', content: task+'\n\nHere is her document:\n\n'+text}] }); }); }
+      if(it.origKind==='html'){ return (blob.text?blob.text():new Response(blob).text()).then(function(html){ var text=htmlToText(html); return claude({ system:CW_SYS, max_tokens:1500, messages:[{role:'user', content: task+'\n\nHere is her document:\n\n'+text}], tag:'Coursework' }); }); }
       return fileToB64(blob).then(function(b64){
         var block = (it.origKind==='pdf') ? {type:'document', source:{type:'base64', media_type:'application/pdf', data:b64}} : {type:'image', source:{type:'base64', media_type:(it.origMime||'image/jpeg'), data:b64}};
-        return claude({ system:CW_SYS, max_tokens:1500, messages:[{role:'user', content:[block, {type:'text', text:task}]}] });
+        return claude({ system:CW_SYS, max_tokens:1500, messages:[{role:'user', content:[block, {type:'text', text:task}]}], tag:'Coursework' });
       });
     });
   }
@@ -2030,16 +2053,16 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
       }).then(function(both){
         var text=((both[0]&&both[0].value)||'').trim(); var html=((both[1]&&both[1].value)||'').trim();
         if(!text){ throw new Error('The Word file looked empty.'); }
-        return claude({ system:sys, max_tokens:1500, messages:[{role:'user', content: helpTask+'\n\nHere is her document:\n\n'+text}] })
+        return claude({ system:sys, max_tokens:1500, messages:[{role:'user', content: helpTask+'\n\nHere is her document:\n\n'+text}], tag:'Coursework' })
           .then(function(help){ afterHelp(help, {kind:'html', html:html}, new Blob([html],{type:'text/html'}), 'html'); });
       }).catch(fail);
     } else if(isPdf){
       var purl=URL.createObjectURL(file);
-      fileToB64(file).then(function(b64){ return claude({ system:sys, max_tokens:1500, messages:[{role:'user', content:[{type:'document', source:{type:'base64', media_type:'application/pdf', data:b64}}, {type:'text', text:helpTask}]}] }); })
+      fileToB64(file).then(function(b64){ return claude({ system:sys, max_tokens:1500, messages:[{role:'user', content:[{type:'document', source:{type:'base64', media_type:'application/pdf', data:b64}}, {type:'text', text:helpTask}]}], tag:'Coursework' }); })
         .then(function(help){ afterHelp(help, {kind:'pdf', url:purl}, file, 'pdf'); }).catch(fail);
     } else {
       var iurl=URL.createObjectURL(file);
-      fileToB64(file).then(function(b64){ return claude({ system:sys, max_tokens:1500, messages:[{role:'user', content:[{type:'image', source:{type:'base64', media_type:mediaType(file), data:b64}}, {type:'text', text:helpTask}]}] }); })
+      fileToB64(file).then(function(b64){ return claude({ system:sys, max_tokens:1500, messages:[{role:'user', content:[{type:'image', source:{type:'base64', media_type:mediaType(file), data:b64}}, {type:'text', text:helpTask}]}], tag:'Coursework' }); })
         .then(function(help){ afterHelp(help, {kind:'image', url:iurl}, file, 'image'); }).catch(fail);
     }
   };
@@ -2199,8 +2222,8 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     var el=document.getElementById('stix'); el.style.display='flex';
     document.getElementById('sxGrid').innerHTML='<p class="empty" style="color:#d8d0c0;">Making your stickers…</p>';
     var content=(lesson.title?lesson.title+'\n\n':'')+lesson.text+(lesson.summary?('\n\nSummary:\n'+lesson.summary):'');
-    claude({ system:'You make colourful revision stickers for a 16-year-old with dyslexia. Return ONLY valid JSON, no markdown: {"stickers":[{"emoji":"one fitting emoji","text":"one key point, max 12 simple words"}]}. Make 6 to 10 stickers covering the most important points. Plain words, no markdown.',
-      messages:[{role:'user', content:'Make stickers from this lesson:\n\n'+content}], max_tokens:800 })
+    claude({ tag:'Stickers', system:'You make colourful revision stickers for a 16-year-old with dyslexia. Return ONLY valid JSON, no markdown: {"stickers":[{"emoji":"one fitting emoji","text":"one key point, max 12 simple words"}]}. Make 6 to 10 stickers covering the most important points. Plain words, no markdown.',
+      messages:[{role:'user', content:'Make stickers from this lesson:\n\n'+content}], max_tokens:800, tag:'Stickers' })
     .then(function(txt){
       var clean=txt.replace(/```json/gi,'').replace(/```/g,'').trim();
       var a=clean.indexOf('{'), b=clean.lastIndexOf('}');
@@ -2422,7 +2445,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     mathChat.push({role:'user', content:text}); saveMathChat(); renderMath();
     var st=document.getElementById('mathStatus'); if(st) st.textContent='Thinking…';
     var msgs=mathChat.slice(-12).map(function(m){ return {role:m.role, content:m.content}; });
-    claude({ system:MATH_SYS, max_tokens:900, messages:msgs })
+    claude({ system:MATH_SYS, max_tokens:900, messages:msgs, tag:'Maths tutor' })
       .then(function(ans){ mathChat.push({role:'assistant', content:ans}); saveMathChat(); renderMath(); if(st) st.textContent=''; })
       .catch(function(e){ if(st) st.textContent=''; mathChat.pop(); saveMathChat(); renderMath(); toast((e&&e.message)||'Could not reach the tutor. Check the key in Settings.'); });
   }
@@ -2435,7 +2458,27 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     if(mt) wireTalk(mt, inp, ms);
   })();
 
-  applySettings(); renderNotes(); renderChat(); renderVideos(); renderCoursework(); renderRecipes(); renderTimetable(); renderMath();
+  function fmtMoney(x){ if(x<0.01) return '<1p'; return '£'+(x*0.79).toFixed(2)+'  ($'+x.toFixed(2)+')'; }
+  function updateUsageTable(){
+    var el=document.getElementById('usageTable'); if(!el) return;
+    var u=load('sl_usage', {items:{}, since:Date.now()});
+    var items=u.items||{}; var keys=Object.keys(items);
+    if(!keys.length){ el.innerHTML='<p class="hint" style="margin:0;">Nothing used yet. As she asks questions, makes summaries, reads coursework and so on, the cost will show here.</p>'; return; }
+    keys.sort(function(a,b){ return items[b].cost-items[a].cost; });
+    var total=0, calls=0; for(var i=0;i<keys.length;i++){ total+=items[keys[i]].cost; calls+=items[keys[i]].calls; }
+    var rows='';
+    for(var j=0;j<keys.length;j++){ var it=items[keys[j]]; rows+='<tr><td style="padding:7px 10px;border-bottom:1px solid #eee;">'+esc(keys[j])+'</td><td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right;">'+it.calls+'</td><td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right;white-space:nowrap;">'+fmtMoney(it.cost)+'</td></tr>'; }
+    var since=new Date(u.since).toLocaleDateString();
+    el.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:14.5px;">'+
+      '<thead><tr style="color:var(--ink-soft);font-family:Saira Condensed,sans-serif;text-transform:uppercase;letter-spacing:.4px;font-size:13px;">'+
+      '<th style="text-align:left;padding:6px 10px;">Feature</th><th style="text-align:right;padding:6px 10px;">Uses</th><th style="text-align:right;padding:6px 10px;">Cost</th></tr></thead>'+
+      '<tbody>'+rows+'</tbody>'+
+      '<tfoot><tr style="font-weight:800;color:var(--herb);"><td style="padding:9px 10px;border-top:2px solid #e7ddc9;">TOTAL</td><td style="padding:9px 10px;border-top:2px solid #e7ddc9;text-align:right;">'+calls+'</td><td style="padding:9px 10px;border-top:2px solid #e7ddc9;text-align:right;white-space:nowrap;">'+fmtMoney(total)+'</td></tr></tfoot></table>'+
+      '<div class="hint" style="margin-top:6px;">Counting since '+since+'. Figures are a close estimate from Haiku/Sonnet rates; your Anthropic Console is the exact bill.</div>';
+  }
+  (function(){ var b=document.getElementById('usageReset'); if(b) b.onclick=function(){ if(window.confirm('Reset the cost counter to zero? (This does not change your real Anthropic bill.)')){ save('sl_usage', {items:{}, since:Date.now()}); updateUsageTable(); } }; })();
+
+  applySettings(); renderNotes(); renderChat(); renderVideos(); renderCoursework(); renderRecipes(); renderTimetable(); renderMath(); updateUsageTable();
 
   /* ---- whole-canvas zoom (increase/decrease at will) ---- */
   var zoom = parseFloat(localStorage.getItem('sl_zoom')||'1'); if(isNaN(zoom)) zoom=1;
