@@ -2516,10 +2516,10 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   function snapMath(file){
     if(!getKey()){ needKey(); return; }
     switchTab('maths');
-    mathChat.push({role:'user', content:'(I sent a photo of a maths question.)'}); saveMathChat(); renderMath();
+    mathChat.push({role:'user', content:'(I sent a photo of a maths question.)'}); saveMathChat(); renderMath(); scrollMathToEnd();
     var st=document.getElementById('mathStatus'); if(st) st.textContent='Reading your question…';
     fileToB64(file).then(function(b64){ return claude({ system:MATH_SYS+' The student has sent a PHOTO of a maths question (from a book or past paper). Read it carefully, then help her work it out step by step in small pieces. Do NOT just give the final answer — guide her, ask her to try a step, and confirm. If you can see the marks, mention them.', max_tokens:1000, tag:'Maths tutor', messages:[{role:'user', content:[{type:'image', source:{type:'base64', media_type:mediaType(file), data:b64}}, {type:'text', text:'Please help me with this question, step by step.'}]}] }); })
-      .then(function(ans){ mathChat.push({role:'assistant', content:ans}); saveMathChat(); renderMath(); if(st) st.textContent=''; })
+      .then(function(ans){ mathChat.push({role:'assistant', content:ans}); saveMathChat(); renderMath(); scrollMathToEnd(); if(st) st.textContent=''; })
       .catch(function(e){ if(st) st.textContent=''; mathChat.pop(); saveMathChat(); renderMath(); toast((e&&e.message)||'Could not read that photo. Try a clearer picture.'); });
   }
   var mathChat = load('sl_mathchat', []);
@@ -2535,28 +2535,32 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
       mr.addEventListener('click', function(e){ if(!e.target.classList.contains('opt')) return; mathPaper=e.target.getAttribute('data-paper'); saveMathPaper(); var k=mr.querySelectorAll('.opt'); for(var j=0;j<k.length;j++) k[j].classList.remove('sel'); e.target.classList.add('sel'); }); }
     renderCourse();
   })();
+  function scrollMathToEnd(){ var wrap=document.getElementById('mathChatWrap'); if(!wrap) return; var last=wrap.lastElementChild; if(last && last.scrollIntoView){ try{ last.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){} } }
   function renderMath(){
     var wrap=document.getElementById('mathChatWrap'); if(!wrap) return; wrap.innerHTML='';
-    if(!mathChat.length){ wrap.innerHTML='<div class="card"><p class="empty" style="margin:0;">Pick a topic above, tap \u201cGive me a practice question\u201d, or ask your own question below. I will help you step by step.</p></div>'; return; }
-    for(var i=0;i<mathChat.length;i++){ (function(m){
+    if(!mathChat.length){ wrap.innerHTML='<div class="card"><p class="empty" style="margin:0;">Pick a topic above, tap a practice button, or ask your own question below. I will help you step by step.</p></div>'; return; }
+    for(var i=0;i<mathChat.length;i++){ (function(m, idx){
       var card=document.createElement('div'); card.className='card'; card.style.marginBottom='10px';
-      var who=document.createElement('div'); who.className='meta'; who.textContent=(m.role==='user')?'You asked:':'Your maths helper:';
-      card.appendChild(who);
-      var body=document.createElement('div'); body.className='readtext'+(m.role==='assistant'?' hl-target':''); if(m.role==='assistant') body.setAttribute('data-hlid','math_'+i);
+      var top=document.createElement('div'); top.style.cssText='display:flex;align-items:center;gap:8px;';
+      var who=document.createElement('div'); who.className='meta'; who.style.flex='1'; who.textContent=(m.role==='user')?'You asked:':'Your maths helper:';
+      var del=document.createElement('button'); del.className='btn ghost small'; del.title='Delete this message'; del.textContent='✕'; del.style.cssText='flex:0 0 auto;padding:2px 9px;';
+      del.onclick=function(){ mathChat.splice(idx,1); saveMathChat(); renderMath(); };
+      top.appendChild(who); top.appendChild(del); card.appendChild(top);
+      var body=document.createElement('div'); body.className='readtext'+(m.role==='assistant'?' hl-target':''); if(m.role==='assistant') body.setAttribute('data-hlid','math_'+idx);
       body.style.cssText='margin-top:4px;'+(m.role==='user'?'color:var(--ink-soft);':'background:#fbf6ea;border-radius:12px;padding:12px 14px;');
       body.textContent=m.content; card.appendChild(body);
       if(m.role==='assistant'){ card.appendChild(makeReadBar(function(){ return m.content; })); var sv=document.createElement('button'); sv.className='btn ghost small'; sv.style.marginTop='6px'; sv.textContent='＋ Save to notes'; sv.onclick=function(){ openSaveModal({ title:'Maths help', heading:'Maths', text:m.content }); }; card.appendChild(sv); }
       wrap.appendChild(card);
-    })(mathChat[i]); }
+    })(mathChat[i], i); }
   }
   function mathSend(text){
     if(!getKey()){ needKey(); return; }
     switchTab('maths');
-    mathChat.push({role:'user', content:text}); saveMathChat(); renderMath();
+    mathChat.push({role:'user', content:text}); saveMathChat(); renderMath(); scrollMathToEnd();
     var st=document.getElementById('mathStatus'); if(st) st.textContent='Thinking…';
     var msgs=mathChat.slice(-12).map(function(m){ return {role:m.role, content:m.content}; });
     claude({ system:MATH_SYS, max_tokens:900, messages:msgs, tag:'Maths tutor' })
-      .then(function(ans){ mathChat.push({role:'assistant', content:ans}); saveMathChat(); renderMath(); if(st) st.textContent=''; })
+      .then(function(ans){ mathChat.push({role:'assistant', content:ans}); saveMathChat(); renderMath(); scrollMathToEnd(); if(st) st.textContent=''; })
       .catch(function(e){ if(st) st.textContent=''; mathChat.pop(); saveMathChat(); renderMath(); toast((e&&e.message)||'Could not reach the tutor. Check the key in Settings.'); });
   }
   (function(){
