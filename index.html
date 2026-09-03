@@ -318,11 +318,13 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     <h2 class="title">Maths</h2>
     <p class="lead">Your patient maths helper for GCSE. Ask anything, or pick a topic below. It explains in small steps, plain words, one thing at a time — and you can hear it read aloud or tap any word.</p>
     <div class="card">
-      <p class="k" style="margin-top:0;">Pick a topic to learn:</p>
-      <div id="mathTopics" class="opts" style="flex-wrap:wrap;gap:8px;"></div>
-      <div class="row" style="margin-top:12px;">
-        <button class="btn amber" id="mathPractice">🎯 Give me a practice question</button>
+      <div style="font-family:'Saira Condensed',sans-serif;text-transform:uppercase;letter-spacing:.6px;font-size:20px;color:var(--herb);">📘 My GCSE Course</div>
+      <p class="hint" style="margin-top:2px;">Your whole GCSE, unit by unit. Tap a topic to be taught it or to practise. Tap the dot to mark how you feel: 🔴 New · 🟡 Learning · 🟢 Confident.</p>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn primary" id="mathNext">✨ What should I study next?</button>
+        <button class="btn amber" id="mathPractice">🎯 Surprise me with a question</button>
       </div>
+      <div id="mathCourse" style="margin-top:12px;"></div>
     </div>
     <div id="mathChatWrap"></div>
     <div class="card">
@@ -2421,10 +2423,56 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
 
   /* ---------- MATHS tutor ---------- */
   var MATH_SYS='You are a kind, patient GCSE Maths tutor for Marvelous, a 16-year-old with dyslexia in the UK (Gloucestershire College, GCSE Maths Foundation tier, exam June 2027). Teach in very small steps, one idea at a time. Use short, plain sentences. Use everyday examples she relates to: money, cooking, catering, time. When you must use a maths word, explain it simply first. For a practice question, do NOT give the final answer straight away — ask her to try, give a gentle hint if needed, then confirm and explain. Always be warm and encouraging; celebrate effort. Never make her feel small for getting it wrong. Do NOT use markdown, asterisks, hash signs, or emojis. Write clearly so it can be read aloud. Keep each reply fairly short unless she asks for more.';
-  var MATH_TOPICS=['Place value & big numbers','Adding & subtracting','Times tables & division','Fractions','Decimals','Percentages','Ratio & proportion','Money problems','Time & timetables','Measures & units','Rounding & estimating','Negative numbers','Shapes & angles','Area & perimeter','Averages (mean, median, mode)','Simple algebra'];
+  var GCSE=[
+    {unit:'1 · Number', topics:['Place value & ordering numbers','The four operations (+ − × ÷)','Negative numbers','Factors, multiples & primes','Powers & roots','Fractions','Decimals','Percentages','Rounding & estimating','Order of operations (BIDMAS)']},
+    {unit:'2 · Algebra', topics:['Using letters for numbers','Simplifying expressions','Expanding brackets','Factorising','Substituting numbers in','Solving equations','Number sequences','Coordinates & straight-line graphs','Real-life graphs']},
+    {unit:'3 · Ratio & Proportion', topics:['Ratio basics','Sharing in a ratio','Scaling a recipe (proportion)','Best buys & value for money','Percentage change (profit & interest)','Speed, distance & time','Converting units (g, kg, ml, l)']},
+    {unit:'4 · Shape & Measure', topics:['Angles & angle rules','Properties of shapes','Perimeter','Area','Volume & capacity','Circles','Symmetry & transformations','Pythagoras\u2019 theorem','Scale drawings & bearings']},
+    {unit:'5 · Statistics', topics:['Mean, median, mode & range','Frequency tables','Bar charts','Pie charts','Scatter graphs','Reading tables & data']},
+    {unit:'6 · Probability', topics:['The likelihood scale','Listing outcomes','Simple probability','Relative frequency','Venn diagrams']}
+  ];
+  var PROG_DOT=['🔴','🟡','🟢'];
+  var mathProg = load('sl_mathprog', {});
+  function saveMathProg(){ save('sl_mathprog', mathProg); }
+  function progOf(t){ return mathProg[t]||0; }
+  function cycleProg(t){ mathProg[t]=((progOf(t)+1)%3); saveMathProg(); renderCourse(); }
+  var mathOpen={};
+  function teachTopic(t){ mathSend('Please teach me "'+t+'" for GCSE Foundation Maths. Explain step by step in small pieces, plain simple words, and use a cooking or catering example where it fits. Then ask me one quick question to check I understood.'); }
+  function practiceTopic(t){ mathSend('Give me ONE GCSE Foundation practice question on "'+t+'". Ask it clearly (use a cooking or catering situation if it fits naturally), then wait for my answer. Do not tell me the answer yet.'); }
+  function studyNext(){ for(var u=0;u<GCSE.length;u++){ for(var i=0;i<GCSE[u].topics.length;i++){ var t=GCSE[u].topics[i]; if(progOf(t)<2){ mathOpen[GCSE[u].unit]=true; teachTopic(t); return; } } } mathSend('I feel confident on all the topics now. Please give me a mixed GCSE Foundation practice quiz of 5 questions, one at a time, and check each answer.'); }
+  function renderCourse(){
+    var wrap=document.getElementById('mathCourse'); if(!wrap) return; wrap.innerHTML='';
+    for(var u=0;u<GCSE.length;u++){ (function(unit, first){
+      var conf=0; for(var i=0;i<unit.topics.length;i++){ if(progOf(unit.topics[i])===2) conf++; }
+      var pct=Math.round(conf/unit.topics.length*100);
+      var open = (unit.unit in mathOpen) ? mathOpen[unit.unit] : first;
+      var card=document.createElement('div'); card.className='card'; card.style.marginBottom='10px';
+      var head=document.createElement('div'); head.style.cssText='display:flex;align-items:center;gap:10px;cursor:pointer;';
+      var h=document.createElement('h3'); h.style.margin='0'; h.textContent=unit.unit;
+      var badge=document.createElement('span'); badge.className='meta'; badge.style.marginLeft='auto'; badge.textContent=conf+'/'+unit.topics.length+' confident';
+      var chev=document.createElement('span'); chev.style.cssText='color:var(--ink-soft);font-size:13px;'; chev.textContent=open?'▲':'▼';
+      head.appendChild(h); head.appendChild(badge); head.appendChild(chev);
+      head.onclick=function(){ mathOpen[unit.unit]=!open; renderCourse(); };
+      var bar=document.createElement('div'); bar.style.cssText='height:8px;background:#e7ddc9;border-radius:6px;margin-top:8px;overflow:hidden;';
+      var fill=document.createElement('div'); fill.style.cssText='height:100%;width:'+pct+'%;background:var(--herb);transition:width .3s;'; bar.appendChild(fill);
+      card.appendChild(head); card.appendChild(bar);
+      if(open){ var list=document.createElement('div'); list.style.marginTop='6px';
+        for(var i2=0;i2<unit.topics.length;i2++){ (function(t){
+          var row=document.createElement('div'); row.style.cssText='display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 0;border-top:1px solid #f0e9d8;';
+          var dot=document.createElement('button'); dot.className='btn ghost small'; dot.title='Tap: New → Learning → Confident'; dot.style.cssText='min-width:38px;'; dot.textContent=PROG_DOT[progOf(t)]; dot.onclick=function(){ cycleProg(t); };
+          var nm=document.createElement('div'); nm.style.cssText='flex:1 1 140px;min-width:0;font-weight:500;'; nm.textContent=t;
+          var teach=document.createElement('button'); teach.className='btn amber small'; teach.textContent='📖 Teach'; teach.onclick=function(){ teachTopic(t); };
+          var prac=document.createElement('button'); prac.className='btn primary small'; prac.textContent='🎯 Practice'; prac.onclick=function(){ practiceTopic(t); };
+          row.appendChild(dot); row.appendChild(nm); row.appendChild(teach); row.appendChild(prac); list.appendChild(row);
+        })(unit.topics[i2]); }
+        card.appendChild(list);
+      }
+      wrap.appendChild(card);
+    })(GCSE[u], u===0); }
+  }
   var mathChat = load('sl_mathchat', []);
   function saveMathChat(){ save('sl_mathchat', mathChat); }
-  (function(){ var box=document.getElementById('mathTopics'); if(!box) return; MATH_TOPICS.forEach(function(t){ var b=document.createElement('button'); b.className='opt'; b.textContent=t; b.onclick=function(){ mathSend('Please teach me "'+t+'" in simple steps for GCSE Foundation, with one everyday example. Then ask me one easy question to check I understood.'); }; box.appendChild(b); }); })();
+  (function(){ var b=document.getElementById('mathNext'); if(b) b.onclick=studyNext; renderCourse(); })();
   function renderMath(){
     var wrap=document.getElementById('mathChatWrap'); if(!wrap) return; wrap.innerHTML='';
     if(!mathChat.length){ wrap.innerHTML='<div class="card"><p class="empty" style="margin:0;">Pick a topic above, tap \u201cGive me a practice question\u201d, or ask your own question below. I will help you step by step.</p></div>'; return; }
