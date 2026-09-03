@@ -2539,17 +2539,30 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   function renderMath(){
     var wrap=document.getElementById('mathChatWrap'); if(!wrap) return; wrap.innerHTML='';
     if(!mathChat.length){ wrap.innerHTML='<div class="card"><p class="empty" style="margin:0;">Pick a topic above, tap a practice button, or ask your own question below. I will help you step by step.</p></div>'; return; }
+    var allC=true; for(var ci=0; ci<mathChat.length; ci++){ if(!mathChat[ci].collapsed){ allC=false; break; } }
+    var barRow=document.createElement('div'); barRow.style.cssText='display:flex;justify-content:flex-end;margin-bottom:6px;';
+    var allBtn=document.createElement('button'); allBtn.className='btn ghost small'; allBtn.textContent=allC?'▸ Expand all':'▾ Collapse all';
+    allBtn.onclick=function(){ var tgt=!allC; for(var k=0;k<mathChat.length;k++) mathChat[k].collapsed=tgt; saveMathChat(); renderMath(); };
+    barRow.appendChild(allBtn); wrap.appendChild(barRow);
     for(var i=0;i<mathChat.length;i++){ (function(m, idx){
+      var collapsed=!!m.collapsed;
       var card=document.createElement('div'); card.className='card'; card.style.marginBottom='10px';
-      var top=document.createElement('div'); top.style.cssText='display:flex;align-items:center;gap:8px;';
-      var who=document.createElement('div'); who.className='meta'; who.style.flex='1'; who.textContent=(m.role==='user')?'You asked:':'Your maths helper:';
+      var top=document.createElement('div'); top.style.cssText='display:flex;align-items:center;gap:8px;cursor:pointer;';
+      var chev=document.createElement('span'); chev.style.cssText='color:var(--ink-soft);flex:0 0 auto;font-size:13px;'; chev.textContent=collapsed?'▶':'▼';
+      var who=document.createElement('div'); who.className='meta'; who.style.flex='1'; who.style.minWidth='0';
+      who.textContent=(m.role==='user')?'You asked:':'Your maths helper:';
+      if(collapsed){ var prev=document.createElement('span'); prev.style.cssText='color:var(--ink-soft);font-weight:400;'; prev.textContent='  — '+(m.content||'').slice(0,60).replace(/\s+/g,' ')+((m.content||'').length>60?'…':''); who.appendChild(prev); }
       var del=document.createElement('button'); del.className='btn ghost small'; del.title='Delete this message'; del.textContent='✕'; del.style.cssText='flex:0 0 auto;padding:2px 9px;';
-      del.onclick=function(){ mathChat.splice(idx,1); saveMathChat(); renderMath(); };
-      top.appendChild(who); top.appendChild(del); card.appendChild(top);
-      var body=document.createElement('div'); body.className='readtext'+(m.role==='assistant'?' hl-target':''); if(m.role==='assistant') body.setAttribute('data-hlid','math_'+idx);
-      body.style.cssText='margin-top:4px;'+(m.role==='user'?'color:var(--ink-soft);':'background:#fbf6ea;border-radius:12px;padding:12px 14px;');
-      body.textContent=m.content; card.appendChild(body);
-      if(m.role==='assistant'){ card.appendChild(makeReadBar(function(){ return m.content; })); var sv=document.createElement('button'); sv.className='btn ghost small'; sv.style.marginTop='6px'; sv.textContent='＋ Save to notes'; sv.onclick=function(){ openSaveModal({ title:'Maths help', heading:'Maths', text:m.content }); }; card.appendChild(sv); }
+      del.onclick=function(ev){ ev.stopPropagation(); mathChat.splice(idx,1); saveMathChat(); renderMath(); };
+      top.appendChild(chev); top.appendChild(who); top.appendChild(del);
+      top.onclick=function(){ m.collapsed=!collapsed; saveMathChat(); renderMath(); };
+      card.appendChild(top);
+      if(!collapsed){
+        var body=document.createElement('div'); body.className='readtext'+(m.role==='assistant'?' hl-target':''); if(m.role==='assistant') body.setAttribute('data-hlid','math_'+idx);
+        body.style.cssText='margin-top:6px;'+(m.role==='user'?'color:var(--ink-soft);':'background:#fbf6ea;border-radius:12px;padding:12px 14px;');
+        body.textContent=m.content; card.appendChild(body);
+        if(m.role==='assistant'){ card.appendChild(makeReadBar(function(){ return m.content; })); var sv=document.createElement('button'); sv.className='btn ghost small'; sv.style.marginTop='6px'; sv.textContent='＋ Save to notes'; sv.onclick=function(){ openSaveModal({ title:'Maths help', heading:'Maths', text:m.content }); }; card.appendChild(sv); }
+      }
       wrap.appendChild(card);
     })(mathChat[i], i); }
   }
