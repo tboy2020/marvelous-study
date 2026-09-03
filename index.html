@@ -783,7 +783,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   function speakWord(w){
     if(!w) return; stopSpeak();
     var u=new SpeechSynthesisUtterance(w);
-    if(voice) u.voice=voice; u.lang='en-GB'; u.rate=Math.min(settings.rate, 0.95);
+    if(voice){ u.voice=voice; u.lang=voice.lang||'en-GB'; } else { u.lang='en-GB'; } u.rate=settings.rate;
     try{ synth.cancel(); synth.speak(u); }catch(e){}
   }
   function wordAtPoint(x,y){
@@ -808,7 +808,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     if(!rd.playing||rd.paused) return;
     if(rd.idx>=rd.chunks.length){ stopSpeak(); return; }
     var u=new SpeechSynthesisUtterance(rd.chunks[rd.idx]);
-    if(voice) u.voice=voice; u.lang='en-GB'; u.rate=settings.rate;
+    if(voice){ u.voice=voice; u.lang=voice.lang||'en-GB'; } else { u.lang='en-GB'; } u.rate=settings.rate;
     u.onend=function(){ if(rd.playing&&!rd.paused){ rd.idx++; setTimeout(playNext, gap()); } };
     u.onerror=function(){ if(rd.playing&&!rd.paused){ rd.idx++; setTimeout(playNext, gap()); } };
     try{ synth.cancel(); synth.speak(u); }catch(e){}
@@ -1779,7 +1779,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     wl.k=k;
     var e=wl.timeline[k];
     wl.t=e.start; renderSlideVisual(e.slide); seekUI();
-    var u=new SpeechSynthesisUtterance(e.text); if(voice)u.voice=voice; u.lang='en-GB'; u.rate=wlRateNow();
+    var u=new SpeechSynthesisUtterance(e.text); if(voice){u.voice=voice; u.lang=voice.lang||'en-GB';} else {u.lang='en-GB';} u.rate=wlRateNow();
     var t0=Date.now();
     if(wl.tick) clearInterval(wl.tick);
     wl.tick=setInterval(function(){
@@ -2193,7 +2193,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     function nxt(){
       if(!dk.auto) return;
       if(idx>=chunks.length){ if(onDone) onDone(); return; }
-      var u=new SpeechSynthesisUtterance(chunks[idx]); if(voice)u.voice=voice; u.lang='en-GB'; u.rate=settings.rate;
+      var u=new SpeechSynthesisUtterance(chunks[idx]); if(voice){u.voice=voice; u.lang=voice.lang||'en-GB';} else {u.lang='en-GB';} u.rate=settings.rate;
       u.onend=function(){ if(dk.auto){ idx++; setTimeout(nxt, gap()); } };
       u.onerror=function(){ if(dk.auto){ idx++; setTimeout(nxt, gap()); } };
       try{ synth.cancel(); synth.speak(u); }catch(e){}
@@ -2386,7 +2386,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   document.getElementById('fontOpts').addEventListener('click', function(e){ if(!e.target.classList.contains('opt'))return; settings.font=e.target.getAttribute('data-val'); save('sl_settings',settings); applySettings(); });
   document.getElementById('voiceSelect').addEventListener('change', function(){ var i=parseInt(this.value,10); if(voiceList[i]){ voice=voiceList[i]; userChoseVoice=true; settings.voiceName=voice.name; save('sl_settings',settings); speakSample(); } });
   document.getElementById('testVoice').onclick=function(){ speakSample(); };
-  function speakSample(){ stopSpeak(); var u=new SpeechSynthesisUtterance('Hello Marvelous, this is your study voice.'); if(voice)u.voice=voice; u.lang='en-GB'; u.rate=settings.rate; try{synth.cancel();synth.speak(u);}catch(e){} }
+  function speakSample(){ stopSpeak(); var u=new SpeechSynthesisUtterance('Hello Marvelous, this is your study voice.'); if(voice){u.voice=voice; u.lang=voice.lang||'en-GB';} else {u.lang='en-GB';} u.rate=settings.rate; try{synth.cancel();synth.speak(u);}catch(e){} }
 
   /* ---------- toast ---------- */
   var toastTimer=null;
