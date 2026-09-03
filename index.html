@@ -316,7 +316,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   <section class="panel" id="p-maths">
     <p class="eyebrow">GCSE Maths — step by step</p>
     <h2 class="title">Maths</h2>
-    <p class="lead">Your patient maths helper for GCSE. Ask anything, or pick a topic below. It explains in small steps, plain words, one thing at a time — and you can hear it read aloud or tap any word.</p>
+    <p class="lead">Your patient maths helper for <b>Edexcel GCSE Foundation</b> (spec 1MA1). Ask anything, or work through your course below. It explains in small steps, plain words, one thing at a time — and you can hear it read aloud or tap any word. Your exam is 3 papers in summer 2027: Paper 1 is non-calculator, Papers 2 &amp; 3 you can use a calculator.</p>
     <div class="card">
       <div style="font-family:'Saira Condensed',sans-serif;text-transform:uppercase;letter-spacing:.6px;font-size:20px;color:var(--herb);">📘 My GCSE Course</div>
       <p class="hint" style="margin-top:2px;">Your whole GCSE, unit by unit. Tap a topic to be taught it or to practise. Tap the dot to mark how you feel: 🔴 New · 🟡 Learning · 🟢 Confident.</p>
@@ -2422,7 +2422,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   }
 
   /* ---------- MATHS tutor ---------- */
-  var MATH_SYS='You are a kind, patient GCSE Maths tutor for Marvelous, a 16-year-old with dyslexia in the UK (Gloucestershire College, GCSE Maths Foundation tier, exam June 2027). Teach in very small steps, one idea at a time. Use short, plain sentences. Use everyday examples she relates to: money, cooking, catering, time. When you must use a maths word, explain it simply first. For a practice question, do NOT give the final answer straight away — ask her to try, give a gentle hint if needed, then confirm and explain. Always be warm and encouraging; celebrate effort. Never make her feel small for getting it wrong. Do NOT use markdown, asterisks, hash signs, or emojis. Write clearly so it can be read aloud. Keep each reply fairly short unless she asks for more.';
+  var MATH_SYS='You are a kind, patient GCSE Maths tutor for Marvelous, a 16-year-old with dyslexia in the UK. She is studying at Gloucestershire College for Edexcel (Pearson) GCSE Mathematics, specification 1MA1, FOUNDATION tier. Her exam is three papers in summer 2027: Paper 1 is non-calculator, Papers 2 and 3 allow a calculator. Foundation grades go from 1 up to 5, and a grade 4 is a pass (about half marks). Teach and set questions in the Edexcel Foundation style, using the words Edexcel uses on the paper (for example: work out, calculate, write down, simplify, expand, factorise, estimate, give your answer to..., show your working). Teach in very small steps, one idea at a time. Use short, plain sentences. Use everyday examples she relates to: money, cooking, catering, time. When you must use a maths word, explain it simply first. Encourage her to show her working, because Edexcel gives method marks. For a practice question, do NOT give the final answer straight away — ask her to try, give a gentle hint if needed, then confirm and explain, and say how many marks it would be worth. Always be warm and encouraging; celebrate effort. Never make her feel small for getting it wrong. Do NOT use markdown, asterisks, hash signs, or emojis. Write clearly so it can be read aloud. Keep each reply fairly short unless she asks for more.';
   var GCSE=[
     {unit:'1 · Number', topics:['Place value & ordering numbers','The four operations (+ − × ÷)','Negative numbers','Factors, multiples & primes','Powers & roots','Fractions','Decimals','Percentages','Rounding & estimating','Order of operations (BIDMAS)']},
     {unit:'2 · Algebra', topics:['Using letters for numbers','Simplifying expressions','Expanding brackets','Factorising','Substituting numbers in','Solving equations','Number sequences','Coordinates & straight-line graphs','Real-life graphs']},
@@ -2437,9 +2437,9 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   function progOf(t){ return mathProg[t]||0; }
   function cycleProg(t){ mathProg[t]=((progOf(t)+1)%3); saveMathProg(); renderCourse(); }
   var mathOpen={};
-  function teachTopic(t){ mathSend('Please teach me "'+t+'" for GCSE Foundation Maths. Explain step by step in small pieces, plain simple words, and use a cooking or catering example where it fits. Then ask me one quick question to check I understood.'); }
-  function practiceTopic(t){ mathSend('Give me ONE GCSE Foundation practice question on "'+t+'". Ask it clearly (use a cooking or catering situation if it fits naturally), then wait for my answer. Do not tell me the answer yet.'); }
-  function studyNext(){ for(var u=0;u<GCSE.length;u++){ for(var i=0;i<GCSE[u].topics.length;i++){ var t=GCSE[u].topics[i]; if(progOf(t)<2){ mathOpen[GCSE[u].unit]=true; teachTopic(t); return; } } } mathSend('I feel confident on all the topics now. Please give me a mixed GCSE Foundation practice quiz of 5 questions, one at a time, and check each answer.'); }
+  function teachTopic(t){ mathSend('Please teach me "'+t+'" for Edexcel GCSE Foundation Maths (spec 1MA1). Explain step by step in small pieces, plain simple words, and use a cooking or catering example where it fits. Use the words Edexcel uses on the exam. Then ask me one quick Edexcel-style question to check I understood.'); }
+  function practiceTopic(t){ mathSend('Give me ONE Edexcel GCSE Foundation practice question on "'+t+'", in the real 1MA1 exam style and wording. Tell me how many marks it is worth. Use a cooking or catering situation if it fits naturally. Then wait for my answer. Do not tell me the answer yet.'); }
+  function studyNext(){ for(var u=0;u<GCSE.length;u++){ for(var i=0;i<GCSE[u].topics.length;i++){ var t=GCSE[u].topics[i]; if(progOf(t)<2){ mathOpen[GCSE[u].unit]=true; teachTopic(t); return; } } } mathSend('I feel confident on all the topics now. Please give me a mixed Edexcel GCSE Foundation (1MA1) practice quiz of 5 exam-style questions, one at a time, with the marks for each, and check each answer.'); }
   function renderCourse(){
     var wrap=document.getElementById('mathCourse'); if(!wrap) return; wrap.innerHTML='';
     for(var u=0;u<GCSE.length;u++){ (function(unit, first){
@@ -2500,7 +2500,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   (function(){
     var ask=document.getElementById('mathAsk'), inp=document.getElementById('mathInput');
     if(ask) ask.onclick=function(){ var t=(inp.value||'').trim(); if(!t){ toast('Type your question first.'); return; } inp.value=''; mathSend(t); };
-    var pr=document.getElementById('mathPractice'); if(pr) pr.onclick=function(){ mathSend('Give me ONE practice question at GCSE Foundation level, a bit challenging but fair. Ask it clearly, then wait for my answer. Do not tell me the answer yet.'); };
+    var pr=document.getElementById('mathPractice'); if(pr) pr.onclick=function(){ mathSend('Give me ONE Edexcel GCSE Foundation (1MA1) exam-style practice question, a bit challenging but fair, with the marks it is worth. Ask it clearly, then wait for my answer. Do not tell me the answer yet.'); };
     var clr=document.getElementById('mathClear'); if(clr) clr.onclick=function(){ if(!mathChat.length || window.confirm('Clear the maths chat?')){ mathChat=[]; saveMathChat(); renderMath(); } };
     var mt=document.getElementById('mathTalk'), ms=document.getElementById('mathStatus');
     if(mt) wireTalk(mt, inp, ms);
