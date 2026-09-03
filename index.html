@@ -328,11 +328,12 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
         <button class="opt" data-paper="calc">🖩 Calculator (Papers 2 &amp; 3)</button>
       </div>
       <div class="row" style="margin-top:12px;flex-wrap:wrap;gap:8px;">
-        <button class="btn primary" id="mathWarmup">⚡ Daily warm-up (5 quick)</button>
+        <button class="btn primary" id="mathWarmup">⚡ Daily warm-up</button>
         <button class="btn amber" id="mathGaps">🔎 Find my gaps</button>
         <button class="btn amber" id="mathPractice">🎯 Surprise me</button>
         <button class="btn tomato" id="mathSnap">📸 Snap a question</button>
       </div>
+      <div id="warmCount" class="hint" style="margin-top:6px;"></div>
       <input type="file" id="mathSnapFile" accept="image/*" style="display:none;">
       <p class="hint" style="margin-top:8px;"><b>⚡ Warm-up</b> builds the quick number skills. <b>🔎 Find my gaps</b> shows what to focus on. <b>📸 Snap</b> a book or past-paper question to be walked through it.</p>
     </div>
@@ -2413,6 +2414,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   function renderTimetable(){
     var wrap=document.getElementById('timetableWrap'); if(!wrap) return; wrap.innerHTML='';
     var todayIdx=(new Date()).getDay();
+    if(todayIdx===0 || todayIdx===6){ var wk=document.createElement('div'); wk.className='card'; wk.style.cssText='margin-bottom:12px;background:#f4f9f5;'; wk.innerHTML='<div style="font-weight:700;color:var(--herb);font-size:17px;">It\u2019s the weekend — no classes today 🙂</div><p class="hint" style="margin-top:4px;">Rest up! If you fancy it, a quick ⚡ warm-up in the Maths tab keeps you sharp. Your week starts again on Monday.</p>'; wrap.appendChild(wk); }
     var dayMap={Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5};
     for(var d=0; d<TIMETABLE.length; d++){ (function(row){
       var isToday=(dayMap[row.day]===todayIdx);
@@ -2463,7 +2465,36 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   var mathOpen={};
   function teachTopic(t){ mathSend('Please teach me "'+t+'" for Edexcel GCSE Foundation Maths (spec 1MA1). Explain step by step in small pieces, plain simple words, and use a cooking or catering example where it fits. Use the words Edexcel uses on the exam.'+paperNote()+' Then ask me one quick Edexcel-style question to check I understood.'); }
   function practiceTopic(t){ mathSend('Give me ONE Edexcel GCSE Foundation practice question on "'+t+'", in the real 1MA1 exam style and wording. Tell me how many marks it is worth. Use a cooking or catering situation if it fits naturally.'+paperNote()+' Then wait for my answer. Do not tell me the answer yet.'); }
-  function mathWarmUp(){ mathSend('Give me a quick warm-up of 5 short NON-CALCULATOR number questions for Edexcel Foundation, to build my speed: things like times tables, adding and subtracting, simple fractions, and finding a percentage of an amount. Ask them ONE at a time, wait for my answer to each, keep it fast, and cheer me on. Start with question 1 now.'); }
+  function warmStats(){ return load('sl_warm', {done:0, days:{}, streak:0, last:''}); }
+  function todayKey(){ var d=new Date(); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+  function bumpWarm(n){
+    var w=warmStats(); n=n||1; w.done=(w.done||0)+n;
+    var tk=todayKey();
+    if(w.last!==tk){
+      // update streak: if last was yesterday, +1; else reset to 1
+      var y=new Date(); y.setDate(y.getDate()-1); var yk=y.getFullYear()+'-'+(y.getMonth()+1)+'-'+y.getDate();
+      w.streak = (w.last===yk) ? ((w.streak||0)+1) : 1;
+      w.last=tk;
+    }
+    w.days[tk]=(w.days[tk]||0)+n;
+    save('sl_warm', w); renderWarmCount();
+  }
+  function renderWarmCount(){ var el=document.getElementById('warmCount'); if(!el) return; var w=warmStats(); var today=w.days[todayKey()]||0; var bits=[]; if(today) bits.push(today+' done today'); if(w.streak>1) bits.push('🔥 '+w.streak+'-day streak'); if(w.done) bits.push(w.done+' total'); el.textContent = bits.length? ('⚡ '+bits.join('  ·  ')) : ''; }
+  function doWarmUp(n){ mathSend('Give me a warm-up of '+n+' short NON-CALCULATOR number questions for Edexcel Foundation, to build my speed: a mix of times tables, adding and subtracting, simple fractions, and finding a percentage of an amount. Ask them ONE at a time, wait for my answer to each, keep it fast and cheer me on. After the last one, tell me how many I got right and ask if I would like more. Start with question 1 now.'); bumpWarm(n); }
+  function mathWarmUp(){
+    if(!getKey()){ needKey(); return; }
+    var box=document.getElementById('mathChatWrap');
+    // simple inline chooser
+    if(document.getElementById('warmChooser')) return;
+    var card=document.createElement('div'); card.className='card'; card.id='warmChooser'; card.style.marginBottom='10px';
+    card.innerHTML='<div style="font-weight:700;color:var(--herb);">How many questions?</div><p class="hint" style="margin-top:2px;">Little and often is best. You can always do more after.</p>';
+    var row=document.createElement('div'); row.className='row'; row.style.marginTop='8px';
+    [5,10,15].forEach(function(n){ var b=document.createElement('button'); b.className='btn primary small'; b.textContent=n+' questions'; b.onclick=function(){ card.parentNode&&card.parentNode.removeChild(card); doWarmUp(n); }; row.appendChild(b); });
+    var cx=document.createElement('button'); cx.className='btn ghost small'; cx.textContent='Cancel'; cx.onclick=function(){ card.parentNode&&card.parentNode.removeChild(card); }; row.appendChild(cx);
+    card.appendChild(row);
+    box.insertBefore(card, box.firstChild);
+    card.scrollIntoView({behavior:'smooth', block:'center'});
+  }
   function mathFindGaps(){ mathSend('I want to find my weak spots so I know what to focus on for my Grade 4. Please give me a short check-up of 8 quick Edexcel Foundation questions, one from each main area: number, fractions, percentages, ratio, simple algebra, area or perimeter, averages, and probability. Ask them ONE at a time and wait for my answer each time. At the end, tell me kindly which areas I am strong in and the 2 or 3 areas I should focus on most, and which topics in my course to practise. Start with question 1 now.'); }
   function studyNext(){ for(var u=0;u<GCSE.length;u++){ for(var i=0;i<GCSE[u].topics.length;i++){ var t=GCSE[u].topics[i]; if(progOf(t)<2){ mathOpen[GCSE[u].unit]=true; teachTopic(t); return; } } } mathSend('I feel confident on all the topics now. Please give me a mixed Edexcel GCSE Foundation (1MA1) practice quiz of 5 exam-style questions, one at a time, with the marks for each, and check each answer.'); }
   function mathStats(){ var total=0, conf=0, learn=0; for(var u=0;u<GCSE.length;u++){ for(var i=0;i<GCSE[u].topics.length;i++){ total++; var p=progOf(GCSE[u].topics[i]); if(p===2)conf++; else if(p===1)learn++; } } return {total:total, conf:conf, learn:learn}; }
@@ -2527,6 +2558,7 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   (function(){
     var b=document.getElementById('mathNext'); if(b) b.onclick=studyNext;
     var w=document.getElementById('mathWarmup'); if(w) w.onclick=mathWarmUp;
+    renderWarmCount();
     var g=document.getElementById('mathGaps'); if(g) g.onclick=mathFindGaps;
     var sn=document.getElementById('mathSnap'), snf=document.getElementById('mathSnapFile');
     if(sn && snf){ sn.onclick=function(){ if(!getKey()){ needKey(); return; } snf.click(); }; snf.onchange=function(){ var f=this.files[0]; this.value=''; if(f) snapMath(f); }; }
