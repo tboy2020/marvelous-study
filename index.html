@@ -316,22 +316,41 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   <section class="panel" id="p-maths">
     <p class="eyebrow">GCSE Maths — step by step</p>
     <h2 class="title">Maths</h2>
-    <p class="lead">Your patient maths helper for <b>Edexcel GCSE Foundation</b> (spec 1MA1). Ask anything, or work through your course below. It explains in small steps, plain words, one thing at a time — and you can hear it read aloud or tap any word. Your exam is 3 papers in summer 2027: Paper 1 is non-calculator, Papers 2 &amp; 3 you can use a calculator.</p>
+    <p class="lead">Your patient maths helper for <b>Edexcel GCSE Foundation</b> (spec 1MA1). Your goal is a <b>Grade 4 to pass</b>. You do not need the hardest questions — we train the ones you can bank, and build your number fluency for the non-calculator paper.</p>
+
+    <div class="card" id="mathGoalCard" style="background:linear-gradient(180deg,#f4f9f5,#fffdf8);"><div id="mathGoal"></div></div>
+
+    <div class="card">
+      <div style="font-family:'Saira Condensed',sans-serif;text-transform:uppercase;letter-spacing:.6px;font-size:20px;color:var(--herb);">🚀 Practice &amp; drills</div>
+      <p class="hint" style="margin-top:2px;">Which paper are we training? Paper 1 is non-calculator (your toughest), so let's train that most.</p>
+      <div class="opts" id="mathModeRow" style="margin-top:8px;">
+        <button class="opt sel" data-paper="noncalc">📵 Non-calculator (Paper 1)</button>
+        <button class="opt" data-paper="calc">🖩 Calculator (Papers 2 &amp; 3)</button>
+      </div>
+      <div class="row" style="margin-top:12px;flex-wrap:wrap;gap:8px;">
+        <button class="btn primary" id="mathWarmup">⚡ Daily warm-up (5 quick)</button>
+        <button class="btn amber" id="mathGaps">🔎 Find my gaps</button>
+        <button class="btn amber" id="mathPractice">🎯 Surprise me</button>
+        <button class="btn tomato" id="mathSnap">📸 Snap a question</button>
+      </div>
+      <input type="file" id="mathSnapFile" accept="image/*" style="display:none;">
+      <p class="hint" style="margin-top:8px;"><b>⚡ Warm-up</b> builds the quick number skills. <b>🔎 Find my gaps</b> shows what to focus on. <b>📸 Snap</b> a book or past-paper question to be walked through it.</p>
+    </div>
+
     <div class="card">
       <div style="font-family:'Saira Condensed',sans-serif;text-transform:uppercase;letter-spacing:.6px;font-size:20px;color:var(--herb);">📘 My GCSE Course</div>
       <p class="hint" style="margin-top:2px;">Your whole GCSE, unit by unit. Tap a topic to be taught it or to practise. Tap the dot to mark how you feel: 🔴 New · 🟡 Learning · 🟢 Confident.</p>
       <div class="row" style="margin-top:8px;">
         <button class="btn primary" id="mathNext">✨ What should I study next?</button>
-        <button class="btn amber" id="mathPractice">🎯 Surprise me with a question</button>
       </div>
       <div id="mathCourse" style="margin-top:12px;"></div>
     </div>
     <div id="mathChatWrap"></div>
     <div class="card">
-      <label class="k" for="mathInput" style="margin-top:0;">Ask a maths question</label>
-      <textarea id="mathInput" placeholder="e.g. How do I turn a fraction into a percentage? Or type your answer to a practice question…" style="min-height:90px;"></textarea>
+      <label class="k" for="mathInput" style="margin-top:0;">Ask a maths question, or type your answer</label>
+      <textarea id="mathInput" placeholder="e.g. How do I find 15% of 60 without a calculator? Or type your answer to a question…" style="min-height:90px;"></textarea>
       <div class="row" style="margin-top:8px;">
-        <button class="btn primary" id="mathAsk">Ask</button>
+        <button class="btn primary" id="mathAsk">Ask / Answer</button>
         <button class="btn tomato" id="mathTalk" data-label="🎤 Talk">🎤 Talk</button>
         <button class="btn ghost" id="mathClear">Clear chat</button>
         <span id="mathStatus" class="hint"></span>
@@ -2433,13 +2452,36 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
   ];
   var PROG_DOT=['🔴','🟡','🟢'];
   var mathProg = load('sl_mathprog', {});
+  var mathPaper = load('sl_mathpaper', 'noncalc');
+  function saveMathPaper(){ save('sl_mathpaper', mathPaper); }
+  function paperNote(){ return mathPaper==='noncalc'
+    ? ' This is for the NON-CALCULATOR paper (Paper 1), so no calculator — show the mental method or the written method step by step, the way she must do it in the exam.'
+    : ' This is for a CALCULATOR paper (Paper 2 or 3), so a calculator is allowed; still show the steps.'; }
   function saveMathProg(){ save('sl_mathprog', mathProg); }
   function progOf(t){ return mathProg[t]||0; }
   function cycleProg(t){ mathProg[t]=((progOf(t)+1)%3); saveMathProg(); renderCourse(); }
   var mathOpen={};
-  function teachTopic(t){ mathSend('Please teach me "'+t+'" for Edexcel GCSE Foundation Maths (spec 1MA1). Explain step by step in small pieces, plain simple words, and use a cooking or catering example where it fits. Use the words Edexcel uses on the exam. Then ask me one quick Edexcel-style question to check I understood.'); }
-  function practiceTopic(t){ mathSend('Give me ONE Edexcel GCSE Foundation practice question on "'+t+'", in the real 1MA1 exam style and wording. Tell me how many marks it is worth. Use a cooking or catering situation if it fits naturally. Then wait for my answer. Do not tell me the answer yet.'); }
+  function teachTopic(t){ mathSend('Please teach me "'+t+'" for Edexcel GCSE Foundation Maths (spec 1MA1). Explain step by step in small pieces, plain simple words, and use a cooking or catering example where it fits. Use the words Edexcel uses on the exam.'+paperNote()+' Then ask me one quick Edexcel-style question to check I understood.'); }
+  function practiceTopic(t){ mathSend('Give me ONE Edexcel GCSE Foundation practice question on "'+t+'", in the real 1MA1 exam style and wording. Tell me how many marks it is worth. Use a cooking or catering situation if it fits naturally.'+paperNote()+' Then wait for my answer. Do not tell me the answer yet.'); }
+  function mathWarmUp(){ mathSend('Give me a quick warm-up of 5 short NON-CALCULATOR number questions for Edexcel Foundation, to build my speed: things like times tables, adding and subtracting, simple fractions, and finding a percentage of an amount. Ask them ONE at a time, wait for my answer to each, keep it fast, and cheer me on. Start with question 1 now.'); }
+  function mathFindGaps(){ mathSend('I want to find my weak spots so I know what to focus on for my Grade 4. Please give me a short check-up of 8 quick Edexcel Foundation questions, one from each main area: number, fractions, percentages, ratio, simple algebra, area or perimeter, averages, and probability. Ask them ONE at a time and wait for my answer each time. At the end, tell me kindly which areas I am strong in and the 2 or 3 areas I should focus on most, and which topics in my course to practise. Start with question 1 now.'); }
   function studyNext(){ for(var u=0;u<GCSE.length;u++){ for(var i=0;i<GCSE[u].topics.length;i++){ var t=GCSE[u].topics[i]; if(progOf(t)<2){ mathOpen[GCSE[u].unit]=true; teachTopic(t); return; } } } mathSend('I feel confident on all the topics now. Please give me a mixed Edexcel GCSE Foundation (1MA1) practice quiz of 5 exam-style questions, one at a time, with the marks for each, and check each answer.'); }
+  function mathStats(){ var total=0, conf=0, learn=0; for(var u=0;u<GCSE.length;u++){ for(var i=0;i<GCSE[u].topics.length;i++){ total++; var p=progOf(GCSE[u].topics[i]); if(p===2)conf++; else if(p===1)learn++; } } return {total:total, conf:conf, learn:learn}; }
+  function renderGoal(){
+    var el=document.getElementById('mathGoal'); if(!el) return;
+    var s=mathStats(); var pct= s.total? Math.round(s.conf/s.total*100):0;
+    var msg = pct===0 ? 'Let\u2019s begin. Tap a topic and press Teach — one small step at a time.'
+      : (pct<34 ? 'Good start. Keep going — every topic you turn green is marks in the bank.'
+      : (pct<67 ? 'You are building real momentum. Over a third confident — keep climbing.'
+      : (pct<100 ? 'Brilliant work — you are most of the way there. Push through the last topics.'
+      : 'Amazing — every topic confident! Now drill past-paper questions to lock it in.')));
+    el.innerHTML =
+      '<div style="font-family:\'Saira Condensed\',sans-serif;text-transform:uppercase;letter-spacing:.6px;font-size:20px;color:var(--herb);">🎯 My goal: Grade 4</div>'+
+      '<div style="font-size:16px;margin-top:4px;">Pass mark: <b>151 out of 240</b> (about 63%). You do <b>not</b> need the hard questions — bank the ones you can, and <b>always show your working</b> (Edexcel gives marks for the method).</div>'+
+      '<div style="margin-top:12px;font-weight:700;color:var(--herb);">Topics you feel confident on: '+s.conf+' of '+s.total+'</div>'+
+      '<div style="height:12px;background:#e7ddc9;border-radius:8px;margin-top:6px;overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:linear-gradient(90deg,#3d6152,#2f4a3f);transition:width .4s;"></div></div>'+
+      '<div class="hint" style="margin-top:8px;">'+msg+'</div>';
+  }
   function renderCourse(){
     var wrap=document.getElementById('mathCourse'); if(!wrap) return; wrap.innerHTML='';
     for(var u=0;u<GCSE.length;u++){ (function(unit, first){
@@ -2469,10 +2511,30 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
       }
       wrap.appendChild(card);
     })(GCSE[u], u===0); }
+    renderGoal();
+  }
+  function snapMath(file){
+    if(!getKey()){ needKey(); return; }
+    switchTab('maths');
+    mathChat.push({role:'user', content:'(I sent a photo of a maths question.)'}); saveMathChat(); renderMath();
+    var st=document.getElementById('mathStatus'); if(st) st.textContent='Reading your question…';
+    fileToB64(file).then(function(b64){ return claude({ system:MATH_SYS+' The student has sent a PHOTO of a maths question (from a book or past paper). Read it carefully, then help her work it out step by step in small pieces. Do NOT just give the final answer — guide her, ask her to try a step, and confirm. If you can see the marks, mention them.', max_tokens:1000, tag:'Maths tutor', messages:[{role:'user', content:[{type:'image', source:{type:'base64', media_type:mediaType(file), data:b64}}, {type:'text', text:'Please help me with this question, step by step.'}]}] }); })
+      .then(function(ans){ mathChat.push({role:'assistant', content:ans}); saveMathChat(); renderMath(); if(st) st.textContent=''; })
+      .catch(function(e){ if(st) st.textContent=''; mathChat.pop(); saveMathChat(); renderMath(); toast((e&&e.message)||'Could not read that photo. Try a clearer picture.'); });
   }
   var mathChat = load('sl_mathchat', []);
   function saveMathChat(){ save('sl_mathchat', mathChat); }
-  (function(){ var b=document.getElementById('mathNext'); if(b) b.onclick=studyNext; renderCourse(); })();
+  (function(){
+    var b=document.getElementById('mathNext'); if(b) b.onclick=studyNext;
+    var w=document.getElementById('mathWarmup'); if(w) w.onclick=mathWarmUp;
+    var g=document.getElementById('mathGaps'); if(g) g.onclick=mathFindGaps;
+    var sn=document.getElementById('mathSnap'), snf=document.getElementById('mathSnapFile');
+    if(sn && snf){ sn.onclick=function(){ if(!getKey()){ needKey(); return; } snf.click(); }; snf.onchange=function(){ var f=this.files[0]; this.value=''; if(f) snapMath(f); }; }
+    var mr=document.getElementById('mathModeRow');
+    if(mr){ var opts=mr.querySelectorAll('.opt'); for(var i=0;i<opts.length;i++){ if(opts[i].getAttribute('data-paper')===mathPaper){ opts[i].classList.add('sel'); } else { opts[i].classList.remove('sel'); } }
+      mr.addEventListener('click', function(e){ if(!e.target.classList.contains('opt')) return; mathPaper=e.target.getAttribute('data-paper'); saveMathPaper(); var k=mr.querySelectorAll('.opt'); for(var j=0;j<k.length;j++) k[j].classList.remove('sel'); e.target.classList.add('sel'); }); }
+    renderCourse();
+  })();
   function renderMath(){
     var wrap=document.getElementById('mathChatWrap'); if(!wrap) return; wrap.innerHTML='';
     if(!mathChat.length){ wrap.innerHTML='<div class="card"><p class="empty" style="margin:0;">Pick a topic above, tap \u201cGive me a practice question\u201d, or ask your own question below. I will help you step by step.</p></div>'; return; }
