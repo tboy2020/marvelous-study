@@ -149,6 +149,8 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     <button class="tab" data-tab="ask">Ask for Help</button>
     <button class="tab" data-tab="coursework">Coursework</button>
     <button class="tab" data-tab="recipes">Recipes</button>
+    <button class="tab" data-tab="maths">Maths</button>
+    <button class="tab" data-tab="timetable">My Week</button>
     <button class="tab" data-tab="videos">Videos</button>
     <button class="tab" data-tab="settings">Settings</button>
   </div>
@@ -308,6 +310,40 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
     </div>
     <input type="text" id="recipeSearch" placeholder="🔍 Search your recipes…" style="margin-top:8px;">
     <div id="recipesList"></div>
+  </section>
+
+  <!-- MATHS -->
+  <section class="panel" id="p-maths">
+    <p class="eyebrow">GCSE Maths — step by step</p>
+    <h2 class="title">Maths</h2>
+    <p class="lead">Your patient maths helper for GCSE. Ask anything, or pick a topic below. It explains in small steps, plain words, one thing at a time — and you can hear it read aloud or tap any word.</p>
+    <div class="card">
+      <p class="k" style="margin-top:0;">Pick a topic to learn:</p>
+      <div id="mathTopics" class="opts" style="flex-wrap:wrap;gap:8px;"></div>
+      <div class="row" style="margin-top:12px;">
+        <button class="btn amber" id="mathPractice">🎯 Give me a practice question</button>
+      </div>
+    </div>
+    <div id="mathChatWrap"></div>
+    <div class="card">
+      <label class="k" for="mathInput" style="margin-top:0;">Ask a maths question</label>
+      <textarea id="mathInput" placeholder="e.g. How do I turn a fraction into a percentage? Or type your answer to a practice question…" style="min-height:90px;"></textarea>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn primary" id="mathAsk">Ask</button>
+        <button class="btn tomato" id="mathTalk" data-label="🎤 Talk">🎤 Talk</button>
+        <button class="btn ghost" id="mathClear">Clear chat</button>
+        <span id="mathStatus" class="hint"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- MY WEEK (timetable) -->
+  <section class="panel" id="p-timetable">
+    <p class="eyebrow">Gloucestershire College</p>
+    <h2 class="title">My Week</h2>
+    <p class="lead">Marvelous's timetable. Today is highlighted. Tap any word to hear it, or use 🔊 to hear the whole day.</p>
+    <div id="timetableWrap"></div>
+    <p class="hint" style="margin-top:10px;">Term: 2 Sep 2026 – 26 Jun 2027 · GCSE Maths: 14 Sep 2026 – 11 Jun 2027. Rooms shown in brackets. Always double-check with the college app for any changes.</p>
   </section>
 
   <!-- VIDEOS -->
@@ -2313,7 +2349,93 @@ mark.hl{ border-radius:3px; padding:0 1px; box-decoration-break:clone; -webkit-b
 
   document.addEventListener('visibilitychange', function(){ if(document.hidden) stopSpeak(); });
 
-  applySettings(); renderNotes(); renderChat(); renderVideos(); renderCoursework(); renderRecipes();
+  /* ---------- MY WEEK (timetable) ---------- */
+  var TIMETABLE=[
+    {day:'Monday', items:[{t:'9:00 – 4:30', name:'Continuous Professional Development', room:'C-NR', kind:'cpd'}]},
+    {day:'Tuesday', items:[{t:'1:00 – 4:45', name:'Catering & Hospitality — Skills', room:'G111', kind:'cater'}]},
+    {day:'Wednesday', items:[{t:'10:00 – 12:30', name:'My Study & Practice — Catering & Hospitality', room:'Online', kind:'cater'}]},
+    {day:'Thursday', items:[
+      {t:'9:15 – 12:30', name:'GCSE Maths', room:'G025b', kind:'maths'},
+      {t:'1:15 – 2:45', name:'Catering & Hospitality — Theory', room:'F135', kind:'cater'},
+      {t:'3:00 – 4:45', name:'Catering & Hospitality — Theory & Tutorial', room:'F135', kind:'cater'}
+    ]},
+    {day:'Friday', items:[
+      {t:'9:00 – 2:30', name:'Catering & Hospitality — Coffee Shop (Group B)', room:'G109', kind:'cater'},
+      {t:'3:00 – 4:00', name:'Catering & Hospitality — Theory', room:'F135', kind:'cater'}
+    ]}
+  ];
+  function kindColor(k){ return k==='maths'?'#2b6fb5':(k==='cpd'?'#7a4fb5':'var(--herb)'); }
+  function kindBg(k){ return k==='maths'?'#eaf2fb':(k==='cpd'?'#f3edfb':'#eef5f0'); }
+  function renderTimetable(){
+    var wrap=document.getElementById('timetableWrap'); if(!wrap) return; wrap.innerHTML='';
+    var todayIdx=(new Date()).getDay();
+    var dayMap={Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5};
+    for(var d=0; d<TIMETABLE.length; d++){ (function(row){
+      var isToday=(dayMap[row.day]===todayIdx);
+      var card=document.createElement('div'); card.className='card'; card.style.cssText='margin-bottom:12px;'+(isToday?'border:2px solid var(--herb);box-shadow:0 4px 16px rgba(47,74,63,.15);':'');
+      var head=document.createElement('div'); head.style.cssText='display:flex;align-items:center;gap:10px;';
+      var h=document.createElement('h3'); h.style.margin='0'; h.textContent=row.day+(isToday?'  · Today':'');
+      if(isToday) h.style.color='var(--herb)';
+      head.appendChild(h);
+      var readBtn=document.createElement('button'); readBtn.className='btn ghost small'; readBtn.style.marginLeft='auto'; readBtn.textContent='🔊';
+      var dayText=row.day+'. '+(row.items.length?row.items.map(function(it){ return it.name+' at '+it.t+', room '+it.room; }).join('. '):'No classes.');
+      readBtn.onclick=function(){ speak(dayText,'read'); };
+      head.appendChild(readBtn); card.appendChild(head);
+      if(!row.items.length){ var e=document.createElement('div'); e.className='hint'; e.style.marginTop='6px'; e.textContent='No classes.'; card.appendChild(e); }
+      for(var i=0;i<row.items.length;i++){ var it=row.items[i];
+        var line=document.createElement('div'); line.className='readtext hl-target'; line.setAttribute('data-hlid','tt_'+row.day+'_'+i);
+        line.style.cssText='display:flex;gap:12px;align-items:flex-start;margin-top:8px;background:'+kindBg(it.kind)+';border-radius:12px;padding:10px 12px;';
+        var time=document.createElement('div'); time.style.cssText='font-family:Saira Condensed,sans-serif;font-weight:700;color:'+kindColor(it.kind)+';flex:0 0 auto;min-width:96px;'; time.textContent=it.t;
+        var body=document.createElement('div'); body.style.flex='1';
+        var nm=document.createElement('div'); nm.style.cssText='font-weight:600;color:var(--ink);'; nm.textContent=it.name;
+        var rm=document.createElement('div'); rm.className='meta'; rm.textContent='Room '+it.room;
+        body.appendChild(nm); body.appendChild(rm);
+        line.appendChild(time); line.appendChild(body); card.appendChild(line);
+      }
+      wrap.appendChild(card);
+    })(TIMETABLE[d]); }
+  }
+
+  /* ---------- MATHS tutor ---------- */
+  var MATH_SYS='You are a kind, patient GCSE Maths tutor for Marvelous, a 16-year-old with dyslexia in the UK (Gloucestershire College, GCSE Maths Foundation tier, exam June 2027). Teach in very small steps, one idea at a time. Use short, plain sentences. Use everyday examples she relates to: money, cooking, catering, time. When you must use a maths word, explain it simply first. For a practice question, do NOT give the final answer straight away — ask her to try, give a gentle hint if needed, then confirm and explain. Always be warm and encouraging; celebrate effort. Never make her feel small for getting it wrong. Do NOT use markdown, asterisks, hash signs, or emojis. Write clearly so it can be read aloud. Keep each reply fairly short unless she asks for more.';
+  var MATH_TOPICS=['Place value & big numbers','Adding & subtracting','Times tables & division','Fractions','Decimals','Percentages','Ratio & proportion','Money problems','Time & timetables','Measures & units','Rounding & estimating','Negative numbers','Shapes & angles','Area & perimeter','Averages (mean, median, mode)','Simple algebra'];
+  var mathChat = load('sl_mathchat', []);
+  function saveMathChat(){ save('sl_mathchat', mathChat); }
+  (function(){ var box=document.getElementById('mathTopics'); if(!box) return; MATH_TOPICS.forEach(function(t){ var b=document.createElement('button'); b.className='opt'; b.textContent=t; b.onclick=function(){ mathSend('Please teach me "'+t+'" in simple steps for GCSE Foundation, with one everyday example. Then ask me one easy question to check I understood.'); }; box.appendChild(b); }); })();
+  function renderMath(){
+    var wrap=document.getElementById('mathChatWrap'); if(!wrap) return; wrap.innerHTML='';
+    if(!mathChat.length){ wrap.innerHTML='<div class="card"><p class="empty" style="margin:0;">Pick a topic above, tap \u201cGive me a practice question\u201d, or ask your own question below. I will help you step by step.</p></div>'; return; }
+    for(var i=0;i<mathChat.length;i++){ (function(m){
+      var card=document.createElement('div'); card.className='card'; card.style.marginBottom='10px';
+      var who=document.createElement('div'); who.className='meta'; who.textContent=(m.role==='user')?'You asked:':'Your maths helper:';
+      card.appendChild(who);
+      var body=document.createElement('div'); body.className='readtext'+(m.role==='assistant'?' hl-target':''); if(m.role==='assistant') body.setAttribute('data-hlid','math_'+i);
+      body.style.cssText='margin-top:4px;'+(m.role==='user'?'color:var(--ink-soft);':'background:#fbf6ea;border-radius:12px;padding:12px 14px;');
+      body.textContent=m.content; card.appendChild(body);
+      if(m.role==='assistant'){ card.appendChild(makeReadBar(function(){ return m.content; })); var sv=document.createElement('button'); sv.className='btn ghost small'; sv.style.marginTop='6px'; sv.textContent='＋ Save to notes'; sv.onclick=function(){ openSaveModal({ title:'Maths help', heading:'Maths', text:m.content }); }; card.appendChild(sv); }
+      wrap.appendChild(card);
+    })(mathChat[i]); }
+  }
+  function mathSend(text){
+    if(!getKey()){ needKey(); return; }
+    switchTab('maths');
+    mathChat.push({role:'user', content:text}); saveMathChat(); renderMath();
+    var st=document.getElementById('mathStatus'); if(st) st.textContent='Thinking…';
+    var msgs=mathChat.slice(-12).map(function(m){ return {role:m.role, content:m.content}; });
+    claude({ system:MATH_SYS, max_tokens:900, messages:msgs })
+      .then(function(ans){ mathChat.push({role:'assistant', content:ans}); saveMathChat(); renderMath(); if(st) st.textContent=''; })
+      .catch(function(e){ if(st) st.textContent=''; mathChat.pop(); saveMathChat(); renderMath(); toast((e&&e.message)||'Could not reach the tutor. Check the key in Settings.'); });
+  }
+  (function(){
+    var ask=document.getElementById('mathAsk'), inp=document.getElementById('mathInput');
+    if(ask) ask.onclick=function(){ var t=(inp.value||'').trim(); if(!t){ toast('Type your question first.'); return; } inp.value=''; mathSend(t); };
+    var pr=document.getElementById('mathPractice'); if(pr) pr.onclick=function(){ mathSend('Give me ONE practice question at GCSE Foundation level, a bit challenging but fair. Ask it clearly, then wait for my answer. Do not tell me the answer yet.'); };
+    var clr=document.getElementById('mathClear'); if(clr) clr.onclick=function(){ if(!mathChat.length || window.confirm('Clear the maths chat?')){ mathChat=[]; saveMathChat(); renderMath(); } };
+    var mt=document.getElementById('mathTalk'), ms=document.getElementById('mathStatus');
+    if(mt) wireTalk(mt, inp, ms);
+  })();
+
+  applySettings(); renderNotes(); renderChat(); renderVideos(); renderCoursework(); renderRecipes(); renderTimetable(); renderMath();
 
   /* ---- whole-canvas zoom (increase/decrease at will) ---- */
   var zoom = parseFloat(localStorage.getItem('sl_zoom')||'1'); if(isNaN(zoom)) zoom=1;
